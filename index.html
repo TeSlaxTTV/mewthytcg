@@ -96,6 +96,8 @@
   .card-art-shine{ position:absolute; inset:0; background:linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.35) 50%, transparent 65%); background-size:250% 250%; background-position:-20% -20%; }
   .card-monogram{ font-family:'Fredoka', sans-serif; font-weight:700; font-size:2.8rem; color:rgba(255,255,255,0.92); position:relative; }
   .cond-chip{ position:absolute; top:8px; right:8px; background:rgba(255,255,255,0.88); color:var(--text); font-size:0.62rem; font-weight:700; padding:3px 8px; border-radius:20px; }
+  .delete-btn{ position:absolute; top:8px; left:8px; width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,0.88); color:var(--text); border:none; font-size:0.95rem; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; }
+  .delete-btn:hover{ background:#FFD9D9; color:#B4231F; }
   .cond-bg-top{ background:linear-gradient(150deg, var(--cyan), var(--violet)); }
   .cond-bg-good{ background:linear-gradient(150deg, var(--violet), var(--pink)); }
   .cond-bg-fair{ background:linear-gradient(150deg, var(--amber), var(--pink-soft)); }
@@ -287,16 +289,18 @@
   let activeTab = 'te koop';
 
   function tileHTML(c){
-    const artClass = c.image ? '' : ('cond-bg-' + (condArtMap[c.cond] || 'top'));
-    const letter = c.name.charAt(0).toUpperCase();
-    const artInner = c.image
-      ? `<img src="${c.image}" alt="${c.name}" loading="lazy">`
-      : `<div class="card-monogram">${letter}</div>`;
+    const bgClass = 'cond-bg-' + (condArtMap[c.cond] || 'top');
+    const letter = (c.name || '?').charAt(0).toUpperCase();
+    const imgTag = c.image
+      ? `<img src="${c.image}" alt="${c.name}" loading="lazy" onerror="this.style.display='none'">`
+      : '';
     return `<div class="card-tile" data-barcode="${c.barcode}">
-      <div class="card-art ${artClass}">
-        ${artInner}
+      <div class="card-art ${bgClass}">
+        ${imgTag}
+        <div class="card-monogram">${letter}</div>
         <div class="card-art-shine"></div>
         <span class="cond-chip">${c.cond}</span>
+        <button class="delete-btn" data-barcode="${c.barcode}" title="Verwijderen" type="button">×</button>
       </div>
       <div class="card-info">
         <div class="card-barcode mono">${c.barcode}</div>
@@ -375,6 +379,15 @@
 
   searchInput.addEventListener('input', () => renderGrid());
 
+  grid.addEventListener('click', (e) => {
+    const btn = e.target.closest('.delete-btn');
+    if(!btn) return;
+    const barcode = btn.dataset.barcode;
+    if(confirm('Deze kaart verwijderen? Dit kan niet ongedaan gemaakt worden.')){
+      db.ref('cards/' + barcode).remove().catch(err => console.error('Verwijderen mislukt:', err));
+    }
+  });
+
   let selectedImage = null;
 
   async function lookupCard(){
@@ -394,7 +407,7 @@
       }
       box.innerHTML = found.map((c, i) => `
         <div class="lookup-item" data-index="${i}">
-          <img src="${(c.images && c.images.small) || ''}" alt="">
+          <img src="${(c.images && c.images.small) || ''}" alt="" onerror="this.style.visibility='hidden'">
           <div>
             <div class="lookup-item-name">${c.name}</div>
             <div class="lookup-item-set">${(c.set && c.set.name) || ''}${c.number ? ' · ' + c.number : ''}</div>
