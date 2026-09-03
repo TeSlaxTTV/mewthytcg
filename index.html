@@ -165,7 +165,7 @@
     <nav>
       <button class="nav-item">Inventaris</button>
     </nav>
-    <div class="sidebar-footer">Fase 1 · stap 1: Inventaris</div>
+    <div class="sidebar-footer">Fase 1 · stap 1: Inventaris<br><a href="#" id="wipeAllLink" style="color:var(--muted); text-decoration:underline; cursor:pointer;">Wis alle testkaarten</a></div>
   </aside>
 
   <main class="main">
@@ -318,12 +318,7 @@
     grid.innerHTML = '<div class="empty-state">Kaarten laden…</div>';
     db.ref('cards').on('value', (snapshot) => {
       const val = snapshot.val();
-      if(!val){
-        cardsData = seedCards.slice();
-        seedCards.forEach(c => db.ref('cards/' + c.barcode).set(c));
-      } else {
-        cardsData = Object.values(val);
-      }
+      cardsData = val ? Object.values(val) : [];
       lastCode = cardsData.reduce((max, c) => {
         const n = parseInt(String(c.barcode).split('-')[1], 10);
         return isNaN(n) ? max : Math.max(max, n);
@@ -385,6 +380,13 @@
     const barcode = btn.dataset.barcode;
     if(confirm('Deze kaart verwijderen? Dit kan niet ongedaan gemaakt worden.')){
       db.ref('cards/' + barcode).remove().catch(err => console.error('Verwijderen mislukt:', err));
+    }
+  });
+
+  document.getElementById('wipeAllLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    if(confirm('Dit verwijdert ALLE kaarten van Brian, Lea en Jordan — iedereen begint leeg. Doorgaan?')){
+      db.ref('cards').remove().catch(err => console.error('Wissen mislukt:', err));
     }
   });
 
