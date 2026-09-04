@@ -179,6 +179,16 @@
   .trade-row .tr-remove{ background:none; border:none; color:var(--muted); font-size:1rem; cursor:pointer; flex-shrink:0; padding:4px; }
   .trade-summary{ background:var(--surface-raised); border-radius:var(--radius-sm); padding:12px 14px; font-size:0.85rem; margin:10px 0 14px; line-height:1.5; }
   .subhead{ font-size:0.78rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.03em; margin:16px 0 8px; }
+  .st-picker-grid{ display:flex; gap:10px; overflow-x:auto; padding:4px 2px 10px; }
+  .st-tile{ position:relative; flex-shrink:0; width:96px; background:var(--surface); border:2px solid var(--line); border-radius:12px; overflow:hidden; cursor:pointer; transition:border-color .15s ease, transform .15s ease; }
+  .st-tile:hover{ transform:translateY(-2px); }
+  .st-tile.selected{ border-color:var(--pink); box-shadow:0 0 0 2px rgba(240,69,158,0.22); }
+  .st-tile .card-art{ aspect-ratio:3/4; cursor:pointer; }
+  .st-tile-info{ padding:6px 7px 8px; }
+  .st-tile-name{ font-size:0.68rem; font-weight:700; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .st-tile-price{ font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:var(--muted); margin-top:2px; }
+  .st-tile-check{ position:absolute; top:5px; right:5px; width:18px; height:18px; border-radius:50%; background:linear-gradient(135deg,var(--pink),var(--violet)); color:#fff; font-size:0.62rem; display:none; align-items:center; justify-content:center; }
+  .st-tile.selected .st-tile-check{ display:flex; }
 
   .detail-hero{ display:flex; gap:16px; margin-bottom:18px; }
   .detail-art{ width:110px; flex-shrink:0; border-radius:var(--radius-sm); overflow:hidden; }
@@ -208,7 +218,7 @@
     <button class="nav-link active" data-page="dashboard">Dashboard</button>
     <button class="nav-link" data-page="inventaris">Inventaris</button>
     <button class="nav-add-circle" id="openAddBtn" title="Item toevoegen" aria-label="Item toevoegen">+</button>
-    <button class="nav-link" id="openSellTradeBtn">Verkoop / Trade</button>
+    <button class="nav-link" id="openSellTradeBtn">Verkopen</button>
   </div>
   <div class="user-select" id="userSelect">
     <button class="user-select-btn" id="userSelectBtn">👤 <span id="activeUserName">Brian</span> <span class="caret">▾</span></button>
@@ -350,21 +360,23 @@
 <!-- ===== VERKOOP / TRADE MODAL ===== -->
 <div class="modal-overlay hidden" id="sellTradeModalOverlay">
   <div class="modal wide">
-    <h2>Verkoop / Trade</h2>
-    <div class="modal-sub">Zoek of scan kaarten uit de voorraad van <strong id="stOwnerName">Brian</strong>.</div>
-
-    <div class="lookup-row">
-      <input type="text" id="stSearchInput" placeholder="Scan barcode of typ kaartnaam...">
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
+      <div>
+        <h2>Verkopen</h2>
+        <div class="modal-sub" style="margin-bottom:0;">Zoek of scan kaarten uit de voorraad van <strong id="stOwnerName">Brian</strong>.</div>
+      </div>
+      <div class="seg" id="stModeSeg" style="flex-shrink:0; width:auto;">
+        <button type="button" class="seg-btn active" data-mode="cash">💶 Cash</button>
+        <button type="button" class="seg-btn" data-mode="trade">🔁 Trade</button>
+      </div>
     </div>
-    <div class="lookup-results" id="stSearchResults"></div>
 
-    <div class="subhead">Geselecteerd</div>
-    <div id="stCartList"><div class="empty-state" style="padding:20px;">Nog niets toegevoegd.</div></div>
+    <input type="text" id="stSearchInput" placeholder="Scan barcode of typ kaartnaam..." style="width:100%; margin:16px 0 12px; background:var(--surface-raised); border:1px solid var(--line-strong); border-radius:var(--radius-sm); color:var(--text); padding:10px 12px; font-size:0.87rem; font-family:inherit;">
 
-    <div class="seg" id="stModeSeg" style="margin:16px 0;">
-      <button type="button" class="seg-btn active" data-mode="cash">💶 Cash / Payconiq</button>
-      <button type="button" class="seg-btn" data-mode="trade">🔁 Trade</button>
-    </div>
+    <div id="stPickerGrid" class="st-picker-grid"></div>
+
+    <div class="subhead">Geselecteerd (<span id="stCartCount">0</span>)</div>
+    <div id="stCartList"><div class="empty-state" style="padding:20px;">Nog niets geselecteerd.</div></div>
 
     <div id="stCashPane">
       <div class="seg" id="stPaySeg" style="margin-bottom:14px;">
@@ -671,14 +683,13 @@
     stCart = []; stMode = 'cash'; stPayMethod = 'Cash';
     document.getElementById('stOwnerName').textContent = activeUserName();
     document.getElementById('stSearchInput').value = '';
-    document.getElementById('stSearchResults').classList.remove('show');
-    document.getElementById('stSearchResults').innerHTML = '';
     stSetSeg('stModeSeg','mode','cash');
     stSetSeg('stPaySeg','method','Cash');
     document.getElementById('stCashPane').classList.remove('hidden');
     document.getElementById('stTradePane').classList.add('hidden');
     document.getElementById('confirmStCashBtn').classList.remove('hidden');
     document.getElementById('confirmStTradeBtn').classList.add('hidden');
+    renderStPicker();
     renderStCart();
     document.getElementById('sellTradeModalOverlay').classList.remove('hidden');
     document.getElementById('stSearchInput').focus();
@@ -704,31 +715,41 @@
 
   const stSearchInput = document.getElementById('stSearchInput');
   function stAvailableItems(){
-    return itemsData.filter(it => it.status==='voorraad' && it.owner===activeInitial && !stCart.find(c=>c.id===it.id));
+    return itemsData.filter(it => it.status==='voorraad' && it.owner===activeInitial);
   }
-  stSearchInput.addEventListener('input', () => {
+  function stTileHTML(item){
+    const bgClass = 'cond-bg-' + condTier(item);
+    const letter = (item.name||'?').charAt(0).toUpperCase();
+    const imgTag = item.image ? `<img src="${item.image}" alt="${item.name}" loading="lazy" onerror="this.style.display='none'">` : '';
+    const isSelected = stCart.some(c=>c.id===item.id);
+    return `<div class="st-tile ${isSelected?'selected':''}" data-id="${item.id}">
+      <div class="card-art ${bgClass}">${imgTag}<div class="card-monogram" style="font-size:1.6rem;">${letter}</div><div class="card-art-shine"></div><span class="st-tile-check">✓</span></div>
+      <div class="st-tile-info"><div class="st-tile-name">${item.name}</div><div class="st-tile-price">€${item.sellingPrice}</div></div>
+    </div>`;
+  }
+  function renderStPicker(){
     const q = stSearchInput.value.trim().toLowerCase();
-    const box = document.getElementById('stSearchResults');
-    if(!q){ box.classList.remove('show'); box.innerHTML=''; return; }
-    const matches = stAvailableItems().filter(it => it.name.toLowerCase().includes(q) || (it.barcode||it.id).toLowerCase().includes(q));
-    box.classList.add('show');
-    box.innerHTML = matches.length===0 ? '<div class="lookup-status">Geen resultaten.</div>' :
-      matches.slice(0,8).map((it,i)=>`<div class="lookup-item" data-index="${i}"><div><div class="lookup-item-name">${it.name}</div><div class="lookup-item-set">${it.barcode||it.id} · €${it.sellingPrice}</div></div></div>`).join('');
-    box.querySelectorAll('.lookup-item').forEach(el => el.addEventListener('click', () => {
-      stAddToCart(matches[parseInt(el.dataset.index,10)]);
-      stSearchInput.value=''; box.classList.remove('show'); box.innerHTML=''; stSearchInput.focus();
+    const avail = stAvailableItems().filter(it => !q || it.name.toLowerCase().includes(q) || (it.barcode||it.id).toLowerCase().includes(q));
+    const grid = document.getElementById('stPickerGrid');
+    grid.innerHTML = avail.length===0 ? '<div class="empty-state" style="padding:16px;">Geen kaarten gevonden.</div>' : avail.map(stTileHTML).join('');
+    grid.querySelectorAll('.st-tile').forEach(tile => tile.addEventListener('click', () => {
+      const id = tile.dataset.id;
+      if(stCart.some(c=>c.id===id)){ stRemoveFromCart(id); }
+      else { const item = itemsData.find(i=>i.id===id); if(item) stAddToCart(item); }
+      renderStPicker();
     }));
-  });
+  }
+  stSearchInput.addEventListener('input', renderStPicker);
   stSearchInput.addEventListener('keydown', (e) => {
     if(e.key !== 'Enter') return;
     e.preventDefault();
     const q = stSearchInput.value.trim().toLowerCase();
     if(!q) return;
-    const avail = stAvailableItems();
+    const avail = stAvailableItems().filter(it => !stCart.find(c=>c.id===it.id));
     const exact = avail.find(it => (it.barcode||it.id).toLowerCase() === q);
-    if(exact){ stAddToCart(exact); stSearchInput.value=''; document.getElementById('stSearchResults').classList.remove('show'); return; }
+    if(exact){ stAddToCart(exact); stSearchInput.value=''; renderStPicker(); return; }
     const nameMatches = avail.filter(it => it.name.toLowerCase().includes(q));
-    if(nameMatches.length===1){ stAddToCart(nameMatches[0]); stSearchInput.value=''; document.getElementById('stSearchResults').classList.remove('show'); }
+    if(nameMatches.length===1){ stAddToCart(nameMatches[0]); stSearchInput.value=''; renderStPicker(); }
   });
 
   function stAddToCart(item){
@@ -736,11 +757,12 @@
     renderStCart();
     if(stMode==='trade') renderStTradeOut();
   }
-  function stRemoveFromCart(id){ stCart = stCart.filter(c=>c.id!==id); renderStCart(); if(stMode==='trade') renderStTradeOut(); }
+  function stRemoveFromCart(id){ stCart = stCart.filter(c=>c.id!==id); renderStCart(); if(stMode==='trade') renderStTradeOut(); renderStPicker(); }
 
   function renderStCart(){
     const list = document.getElementById('stCartList');
-    if(stCart.length===0){ list.innerHTML = '<div class="empty-state" style="padding:20px;">Nog niets toegevoegd.</div>'; updateStCashTotal(); return; }
+    document.getElementById('stCartCount').textContent = stCart.length;
+    if(stCart.length===0){ list.innerHTML = '<div class="empty-state" style="padding:20px;">Nog niets geselecteerd.</div>'; updateStCashTotal(); return; }
     list.innerHTML = stCart.map(it => `<div class="sale-item-row" data-id="${it.id}">
       <div class="sale-item-name">${it.name}<div class="sale-item-cost">${it.purchasePrice!=null?'Cost €'+it.purchasePrice:'Cost —'}</div></div>
       <input type="number" class="sale-item-price mono" value="${it.sellingPrice}" step="0.5" min="0">
