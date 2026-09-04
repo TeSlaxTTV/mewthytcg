@@ -162,6 +162,17 @@
   .lookup-item-set{ color:var(--muted); font-size:0.7rem; }
   .lookup-status{ color:var(--muted); font-size:0.78rem; padding:8px 10px; }
 
+  #csResults{ max-height:400px; overflow-y:auto; border:1px solid var(--line-strong); border-radius:var(--radius-sm); margin-bottom:6px; }
+  .cs-row{ display:flex; align-items:center; gap:10px; padding:9px 12px; border-bottom:1px solid var(--line); }
+  .cs-row:last-child{ border-bottom:none; }
+  .cs-row.selected{ background:var(--surface-raised); }
+  .cs-check{ width:20px; height:20px; flex-shrink:0; accent-color:var(--violet); cursor:pointer; }
+  .cs-thumb{ width:32px; height:44px; object-fit:cover; border-radius:4px; flex-shrink:0; background:var(--surface-raised); }
+  .cs-info{ flex:1; min-width:0; }
+  .cs-name{ font-weight:600; font-size:0.85rem; }
+  .cs-set{ color:var(--muted); font-size:0.72rem; }
+  .cs-price{ width:90px; flex-shrink:0; background:var(--surface); border:1px solid var(--line-strong); border-radius:8px; padding:7px 8px; font-size:0.83rem; font-family:inherit; }
+
   .sale-item-row{ display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); }
   .sale-item-row:last-child{ border-bottom:none; }
   .sale-item-name{ flex:1; font-weight:600; font-size:0.87rem; min-width:0; }
@@ -179,8 +190,8 @@
   .trade-row .tr-remove{ background:none; border:none; color:var(--muted); font-size:1rem; cursor:pointer; flex-shrink:0; padding:4px; }
   .trade-summary{ background:var(--surface-raised); border-radius:var(--radius-sm); padding:12px 14px; font-size:0.85rem; margin:10px 0 14px; line-height:1.5; }
   .subhead{ font-size:0.78rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.03em; margin:16px 0 8px; }
-  .st-picker-grid{ display:flex; gap:10px; overflow-x:auto; padding:4px 2px 10px; }
-  .st-tile{ position:relative; flex-shrink:0; width:96px; background:var(--surface); border:2px solid var(--line); border-radius:12px; overflow:hidden; cursor:pointer; transition:border-color .15s ease, transform .15s ease; }
+  .st-picker-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:10px; max-height:300px; overflow-y:auto; padding:4px 2px 10px; }
+  .st-tile{ position:relative; background:var(--surface); border:2px solid var(--line); border-radius:12px; overflow:hidden; cursor:pointer; transition:border-color .15s ease, transform .15s ease; }
   .st-tile:hover{ transform:translateY(-2px); }
   .st-tile.selected{ border-color:var(--pink); box-shadow:0 0 0 2px rgba(240,69,158,0.22); }
   .st-tile .card-art{ aspect-ratio:3/4; cursor:pointer; }
@@ -233,8 +244,8 @@
 <div class="main">
 
   <div id="view-dashboard" class="view">
-    <h1 class="page-title">Dashboard</h1>
-    <div class="page-sub">Overzicht van het volledige team.</div>
+    <h1 class="page-title">Dashboard van <span id="dashOwnerName">Brian</span></h1>
+    <div class="page-sub">Wissel van gebruiker rechtsboven.</div>
 
     <div class="stat-row">
       <div class="stat-card c-violet"><div class="stat-label">Total Cards</div><div class="stat-value" id="statTotalCards">0</div></div>
@@ -284,7 +295,6 @@
           <input type="text" id="fName" placeholder="bv. Charizard ex" required>
           <button type="button" class="btn-lookup" id="lookupBtn">Zoek</button>
         </div>
-        <div class="lookup-results" id="lookupResults"></div>
       </div>
       <div class="field-row">
         <div class="field"><label>Card number</label><input type="text" id="fNumber" placeholder="12/21"></div>
@@ -335,6 +345,24 @@
         <button type="submit" class="btn-primary">Toevoegen</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ===== BULK CARD SEARCH MODAL ===== -->
+<div class="modal-overlay hidden" id="csModalOverlay">
+  <div class="modal wide" style="max-width:680px;">
+    <h2>Kaarten zoeken</h2>
+    <div class="modal-sub">Vink aan wat je wil toevoegen, vul per kaart de verkoopprijs in. Meerdere tegelijk kan.</div>
+    <div class="field-row">
+      <div class="field"><label>Naam</label><input type="text" id="csName" placeholder="bv. Charizard"></div>
+      <div class="field"><label>Card number (optioneel)</label><input type="text" id="csNumber" placeholder="bv. 199/197"></div>
+    </div>
+    <button type="button" class="btn-primary" id="csSearchBtn" style="margin-bottom:14px;">Zoeken</button>
+    <div id="csResults"><div class="lookup-status">Typ een naam en klik Zoeken.</div></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="csCloseBtn">Annuleren</button>
+      <button type="button" class="btn-primary" id="csAddSelectedBtn">Geselecteerde toevoegen (<span id="csSelectedCount">0</span>)</button>
+    </div>
   </div>
 </div>
 
@@ -512,12 +540,14 @@
   }
 
   function renderDashboard(){
-    const allStock = itemsData.filter(i => i.status === 'voorraad');
+    document.getElementById('dashOwnerName').textContent = activeUserName();
+    const allStock = itemsData.filter(i => i.status === 'voorraad' && i.owner === activeInitial);
     document.getElementById('statTotalCards').textContent = allStock.length;
     document.getElementById('statTotalValue').textContent = '€' + allStock.reduce((s,i)=>s+(parseFloat(i.sellingPrice)||0),0).toFixed(2);
-    document.getElementById('statCustomers').textContent = transactionsData.length;
+    const userTx = transactionsData.filter(tx => tx.user === activeUserName());
+    document.getElementById('statCustomers').textContent = userTx.length;
 
-    const hist = [...transactionsData].sort((a,b)=>b.timestamp-a.timestamp).slice(0,10);
+    const hist = [...userTx].sort((a,b)=>b.timestamp-a.timestamp).slice(0,10);
     document.getElementById('historyPanel').innerHTML = hist.length===0 ? '<div class="empty-state">Nog geen transacties.</div>' : hist.map(tx => {
       const label = tx.type==='sale'?'Sale':tx.type==='trade'?'Trade':'Purchase';
       const names = (tx.items||[]).map(i=>i.name).join(', ') || '—';
@@ -558,6 +588,7 @@
     document.getElementById('invOwnerName').textContent = b.dataset.name;
     userSelectMenu.classList.add('hidden');
     renderGrid();
+    renderDashboard();
   }));
 
   // ===== Toevoegen modal =====
@@ -577,36 +608,89 @@
   document.querySelectorAll('#acqSeg .seg-btn').forEach(b => b.addEventListener('click', () => setActiveSeg('acqSeg', b.dataset.acq)));
 
   let selectedImage = null;
-  async function lookupCard(){
-    const q = document.getElementById('fName').value.trim();
-    const box = document.getElementById('lookupResults');
-    if(!q) return;
-    box.classList.add('show'); box.innerHTML = '<div class="lookup-status">Zoeken…</div>';
+  let csFound = [];
+  let csSelected = new Set();
+
+  function openCardSearchModal(){
+    document.getElementById('csName').value = document.getElementById('fName').value.trim();
+    document.getElementById('csNumber').value = '';
+    csFound = []; csSelected = new Set();
+    document.getElementById('csResults').innerHTML = '<div class="lookup-status">Typ een naam en klik Zoeken.</div>';
+    updateCsCount();
+    document.getElementById('csModalOverlay').classList.remove('hidden');
+    document.getElementById('csName').focus();
+    if(document.getElementById('csName').value) csSearch();
+  }
+  document.getElementById('lookupBtn').addEventListener('click', openCardSearchModal);
+  document.getElementById('csCloseBtn').addEventListener('click', () => document.getElementById('csModalOverlay').classList.add('hidden'));
+  document.getElementById('csModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='csModalOverlay') e.currentTarget.classList.add('hidden'); });
+
+  async function csSearch(){
+    const name = document.getElementById('csName').value.trim();
+    const number = document.getElementById('csNumber').value.trim();
+    const box = document.getElementById('csResults');
+    if(!name){ box.innerHTML = '<div class="lookup-status">Typ minstens een naam.</div>'; return; }
+    box.innerHTML = '<div class="lookup-status">Zoeken…</div>';
+    let query = 'name:"' + name + '"';
+    if(number) query += ' number:"' + number + '"';
     try{
-      const res = await fetch('https://api.pokemontcg.io/v2/cards?q=' + encodeURIComponent('name:"' + q + '"') + '&pageSize=6');
+      const res = await fetch('https://api.pokemontcg.io/v2/cards?q=' + encodeURIComponent(query) + '&pageSize=30');
       if(!res.ok) throw new Error('fail');
       const data = await res.json();
-      const found = data.data || [];
-      if(found.length===0){ box.innerHTML = '<div class="lookup-status">Geen resultaten — vul manueel in.</div>'; return; }
-      box.innerHTML = found.map((c,i)=>`<div class="lookup-item" data-index="${i}"><img src="${(c.images&&c.images.small)||''}" alt="" onerror="this.style.visibility='hidden'"><div><div class="lookup-item-name">${c.name}</div><div class="lookup-item-set">${(c.set&&c.set.name)||''}${c.number?' · '+c.number:''}</div></div></div>`).join('');
-      box.querySelectorAll('.lookup-item').forEach(el => el.addEventListener('click', () => {
-        const c = found[parseInt(el.dataset.index,10)];
-        document.getElementById('fName').value = c.name;
-        document.getElementById('fNumber').value = c.number || '';
-        document.getElementById('fSet').value = (c.set && c.set.name) || '';
-        selectedImage = (c.images && (c.images.large || c.images.small)) || null;
-        box.classList.remove('show'); box.innerHTML='';
-      }));
-    } catch(err){ console.error(err); box.innerHTML = '<div class="lookup-status">Opzoeken mislukt — vul manueel in.</div>'; }
+      csFound = data.data || [];
+      csSelected = new Set();
+      updateCsCount();
+      if(csFound.length===0){ box.innerHTML = '<div class="lookup-status">Geen resultaten — probeer een andere naam of pas het nummer aan.</div>'; return; }
+      box.innerHTML = csFound.map((c,i) => `
+        <div class="cs-row" data-idx="${i}">
+          <input type="checkbox" class="cs-check">
+          <img class="cs-thumb" src="${(c.images&&c.images.small)||''}" alt="" onerror="this.style.visibility='hidden'">
+          <div class="cs-info"><div class="cs-name">${c.name}</div><div class="cs-set">${(c.set&&c.set.name)||''}${c.number?' · '+c.number:''}</div></div>
+          <input type="number" class="cs-price mono" placeholder="€ prijs" step="0.5" min="0">
+        </div>`).join('');
+      box.querySelectorAll('.cs-row').forEach(row => {
+        const idx = parseInt(row.dataset.idx,10);
+        row.querySelector('.cs-check').addEventListener('change', (e) => {
+          if(e.target.checked) csSelected.add(idx); else csSelected.delete(idx);
+          row.classList.toggle('selected', e.target.checked);
+          updateCsCount();
+        });
+      });
+    } catch(err){ console.error(err); box.innerHTML = '<div class="lookup-status">Opzoeken mislukt — probeer opnieuw.</div>'; }
   }
-  document.getElementById('lookupBtn').addEventListener('click', lookupCard);
+  document.getElementById('csSearchBtn').addEventListener('click', csSearch);
+  document.getElementById('csName').addEventListener('keydown', (e) => { if(e.key==='Enter'){ e.preventDefault(); csSearch(); } });
+  document.getElementById('csNumber').addEventListener('keydown', (e) => { if(e.key==='Enter'){ e.preventDefault(); csSearch(); } });
+
+  function updateCsCount(){ document.getElementById('csSelectedCount').textContent = csSelected.size; }
+
+  document.getElementById('csAddSelectedBtn').addEventListener('click', () => {
+    if(csSelected.size === 0) return;
+    const rows = document.querySelectorAll('#csResults .cs-row');
+    csSelected.forEach(idx => {
+      const c = csFound[idx];
+      const row = [...rows].find(r => parseInt(r.dataset.idx,10) === idx);
+      const price = parseFloat(row.querySelector('.cs-price').value) || 0;
+      const id = genId();
+      const item = {
+        id, name: c.name, cardNumber: c.number || '', set: (c.set && c.set.name) || '',
+        barcode: id, itemType: 'Raw', condition: 'NM', gradingCompany: null, grade: null,
+        sellingPrice: price, purchasePrice: null, tradeValue: null,
+        acquisitionMethod: 'Cash', acquisitionDetails: null,
+        owner: activeInitial, status: 'voorraad', createdAt: Date.now()
+      };
+      const img = (c.images && (c.images.large || c.images.small)) || null;
+      if(img) item.image = img;
+      saveItem(item);
+    });
+    document.getElementById('csModalOverlay').classList.add('hidden');
+    document.getElementById('addModalOverlay').classList.add('hidden');
+  });
 
   function openAddModal(){
     document.getElementById('addForm').reset();
     document.getElementById('addOwnerName').textContent = activeUserName();
     selectedImage = null;
-    document.getElementById('lookupResults').classList.remove('show');
-    document.getElementById('lookupResults').innerHTML = '';
     setActiveSeg('typeSeg','Raw'); toggleCondFields('Raw');
     setActiveSeg('condRawSeg','NM'); setActiveSeg('acqSeg','Cash');
     document.getElementById('addModalOverlay').classList.remove('hidden');
