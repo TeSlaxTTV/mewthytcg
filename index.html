@@ -133,6 +133,8 @@
   .balance-label{ color:var(--muted); font-size:0.8rem; font-weight:600; position:relative; }
   .balance-value{ font-family:'JetBrains Mono', monospace; font-weight:700; font-size:1.6rem; color:var(--text); margin-top:8px; position:relative; }
   .balance-context{ color:var(--muted); font-size:0.74rem; margin-top:4px; position:relative; }
+  .balance-edit{ position:relative; display:block; margin-top:10px; background:none; border:none; color:var(--violet-deep); font-size:0.72rem; font-weight:700; cursor:pointer; padding:0; text-decoration:underline; }
+  .balance-edit:hover{ color:var(--pink-deep); }
   .trade-row{ display:flex; gap:8px; margin-bottom:8px; align-items:center; }
   .trade-row input{ background:var(--surface-raised); border:1px solid var(--line-strong); border-radius:var(--radius-sm); padding:8px 10px; font-size:0.85rem; font-family:inherit; color:var(--text); }
   .trade-row .tr-name{ flex:2; min-width:0; }
@@ -244,8 +246,8 @@
       </div>
 
       <div class="balance-grid">
-        <div class="balance-card c-cash"><div class="balance-label">Cash</div><div class="balance-value" id="cashBalance">€0</div><div class="balance-context">huidig saldo</div></div>
-        <div class="balance-card c-bank"><div class="balance-label">Payconiq</div><div class="balance-value" id="payconiqBalance">€0</div><div class="balance-context">huidig saldo</div></div>
+        <div class="balance-card c-cash"><div class="balance-label">Cash</div><div class="balance-value" id="cashBalance">€0</div><div class="balance-context">huidig saldo</div><button type="button" class="balance-edit" data-key="cash">Aanpassen</button></div>
+        <div class="balance-card c-bank"><div class="balance-label">Payconiq</div><div class="balance-value" id="payconiqBalance">€0</div><div class="balance-context">huidig saldo</div><button type="button" class="balance-edit" data-key="bank">Aanpassen</button></div>
       </div>
 
       <div class="toolbar">
@@ -655,6 +657,18 @@
     const newVal = +(((balances[key]) || 0) + amount).toFixed(2);
     db.ref('balance/' + key).set(newVal);
   }
+
+  document.querySelectorAll('.balance-edit').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      const label = key === 'cash' ? 'Cash' : 'Payconiq';
+      const current = balances[key] || 0;
+      const input = prompt(`${label}-saldo instellen (€) — bv. je startbudget voor de beurs:`, current);
+      if(input !== null && input.trim() !== '' && !isNaN(parseFloat(input))){
+        db.ref('balance/' + key).set(parseFloat(input));
+      }
+    });
+  });
 
   avatars.forEach(a => {
     a.addEventListener('click', () => {
