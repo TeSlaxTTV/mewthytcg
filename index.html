@@ -54,7 +54,9 @@
   .brand img{ width:100%; max-width:172px; height:auto; display:block; }
   .brand-sub{ color:var(--muted); font-size:0.72rem; margin-top:10px; font-weight:500; }
   nav{ display:flex; flex-direction:column; gap:4px; padding:0 14px; }
-  .nav-item{ display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:var(--radius-sm); color:#fff; font-size:0.9rem; font-weight:600; background:linear-gradient(135deg, var(--pink), var(--violet)); box-shadow:0 6px 16px rgba(240,69,158,0.28); border:none; }
+  .nav-item{ display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:var(--radius-sm); color:var(--muted); font-size:0.9rem; font-weight:600; background:none; border:none; cursor:pointer; text-align:left; width:100%; transition:color .15s ease, background .15s ease, box-shadow .15s ease; }
+  .nav-item:hover{ color:var(--text); background:var(--surface-raised); }
+  .nav-item.active{ color:#fff; background:linear-gradient(135deg, var(--pink), var(--violet)); box-shadow:0 6px 16px rgba(240,69,158,0.28); }
   .sidebar-footer{ margin-top:auto; padding:16px 20px 0 20px; color:var(--muted); font-size:0.72rem; border-top:1px solid var(--line); }
 
   .main{ flex:1; min-width:0; padding:36px 44px 60px; }
@@ -62,9 +64,9 @@
   .topbar-sub{ color:var(--muted); font-size:0.88rem; margin-top:6px; font-weight:500; }
 
   .team-switch{ display:flex; align-items:center; gap:10px; }
-  .avatar{ width:36px; height:36px; border-radius:50%; background:var(--surface-raised); border:2px solid transparent; color:var(--muted); font-family:'Fredoka', sans-serif; font-weight:600; font-size:0.85rem; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:transform .15s ease, color .15s ease; background-clip:padding-box; }
+  .avatar{ width:36px; height:36px; border-radius:50%; background:var(--surface-raised); border:none; color:var(--muted); font-family:'Fredoka', sans-serif; font-weight:700; font-size:0.85rem; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:transform .15s ease, background .15s ease, color .15s ease; }
   .avatar:hover{ color:var(--text); transform:translateY(-1px); }
-  .avatar.active{ color:#fff; background-image:linear-gradient(var(--surface-raised), var(--surface-raised)), linear-gradient(135deg, var(--pink), var(--violet)); background-origin:border-box; background-clip:padding-box, border-box; }
+  .avatar.active{ background:linear-gradient(135deg, var(--pink), var(--violet)); color:#fff; box-shadow:0 4px 12px rgba(240,69,158,0.35); }
 
   .view-header{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:22px; flex-wrap:wrap; }
   .view-header-sub{ color:var(--muted); font-size:0.88rem; margin-top:6px; font-weight:500; max-width:48ch; }
@@ -121,6 +123,16 @@
   .pay-option{ flex:1; background:var(--surface-raised); border:1px solid var(--line-strong); border-radius:var(--radius-sm); padding:10px; text-align:center; font-size:0.85rem; font-weight:700; color:var(--muted); cursor:pointer; }
   .pay-option.active{ color:#fff; background:linear-gradient(135deg, var(--pink), var(--violet)); border-color:transparent; }
   .empty-state{ grid-column:1/-1; padding:48px 16px; text-align:center; color:var(--muted); font-size:0.88rem; }
+
+  .balance-grid{ display:grid; grid-template-columns:repeat(2, 1fr); gap:14px; margin-bottom:28px; max-width:420px; }
+  .balance-card{ position:relative; overflow:hidden; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px; box-shadow:0 4px 14px rgba(36,20,66,0.06); }
+  .balance-card::after{ content:''; position:absolute; inset:0; background:linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.55) 50%, transparent 70%); background-size:250% 250%; background-position:-30% -30%; pointer-events:none; }
+  @media (prefers-reduced-motion: no-preference){ .balance-card::after{ transition:background-position .6s ease; } .balance-card:hover::after{ background-position:130% 130%; } }
+  .balance-card.c-cash{ border-top:3px solid var(--cyan); }
+  .balance-card.c-bank{ border-top:3px solid var(--violet); }
+  .balance-label{ color:var(--muted); font-size:0.8rem; font-weight:600; position:relative; }
+  .balance-value{ font-family:'JetBrains Mono', monospace; font-weight:700; font-size:1.6rem; color:var(--text); margin-top:8px; position:relative; }
+  .balance-context{ color:var(--muted); font-size:0.74rem; margin-top:4px; position:relative; }
   .trade-row{ display:flex; gap:8px; margin-bottom:8px; align-items:center; }
   .trade-row input{ background:var(--surface-raised); border:1px solid var(--line-strong); border-radius:var(--radius-sm); padding:8px 10px; font-size:0.85rem; font-family:inherit; color:var(--text); }
   .trade-row .tr-name{ flex:2; min-width:0; }
@@ -231,9 +243,9 @@
         </div>
       </div>
 
-      <div class="stats" style="grid-template-columns:repeat(2,1fr); margin-bottom:24px;">
-        <div class="stat c-cyan"><div class="stat-label">Cash</div><div class="stat-value" id="cashBalance">€0</div><div class="stat-context">huidig saldo</div></div>
-        <div class="stat c-violet"><div class="stat-label">Payconiq</div><div class="stat-value" id="payconiqBalance">€0</div><div class="stat-context">huidig saldo</div></div>
+      <div class="balance-grid">
+        <div class="balance-card c-cash"><div class="balance-label">Cash</div><div class="balance-value" id="cashBalance">€0</div><div class="balance-context">huidig saldo</div></div>
+        <div class="balance-card c-bank"><div class="balance-label">Payconiq</div><div class="balance-value" id="payconiqBalance">€0</div><div class="balance-context">huidig saldo</div></div>
       </div>
 
       <div class="toolbar">
