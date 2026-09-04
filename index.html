@@ -110,7 +110,26 @@
   .card-prices > div{ display:flex; flex-direction:column; }
   .price-label{ color:var(--muted); font-size:0.65rem; font-weight:600; }
   .card-prices .price-mono{ font-family:'JetBrains Mono', monospace; font-weight:600; font-size:0.84rem; margin-top:2px; }
+  .view.hidden{ display:none; }
+  .hidden{ display:none !important; }
+
+  .sell-tile{ cursor:pointer; }
+  .sell-tile .card-prices{ display:none; }
+  .sell-price-row{ display:flex; justify-content:space-between; align-items:center; padding-top:8px; border-top:1px solid var(--line); }
+  .sell-price-row .price-mono{ font-family:'JetBrains Mono', monospace; font-weight:600; font-size:0.84rem; }
+  .pay-toggle{ display:flex; gap:8px; margin-top:6px; }
+  .pay-option{ flex:1; background:var(--surface-raised); border:1px solid var(--line-strong); border-radius:var(--radius-sm); padding:10px; text-align:center; font-size:0.85rem; font-weight:700; color:var(--muted); cursor:pointer; }
+  .pay-option.active{ color:#fff; background:linear-gradient(135deg, var(--pink), var(--violet)); border-color:transparent; }
   .empty-state{ grid-column:1/-1; padding:48px 16px; text-align:center; color:var(--muted); font-size:0.88rem; }
+  .trade-row{ display:flex; gap:8px; margin-bottom:8px; align-items:center; }
+  .trade-row input{ background:var(--surface-raised); border:1px solid var(--line-strong); border-radius:var(--radius-sm); padding:8px 10px; font-size:0.85rem; font-family:inherit; color:var(--text); }
+  .trade-row .tr-name{ flex:2; min-width:0; }
+  .trade-row .tr-value{ flex:1; min-width:0; }
+  .trade-row .tr-pct{ flex:0 0 56px; }
+  .trade-row .tr-remove{ background:none; border:none; color:var(--muted); font-size:1rem; cursor:pointer; flex-shrink:0; padding:4px; }
+  .trade-row .tr-remove:hover{ color:#B4231F; }
+  .trade-summary{ background:var(--surface-raised); border-radius:var(--radius-sm); padding:12px 14px; font-size:0.85rem; margin:10px 0 14px; line-height:1.5; }
+  .trade-hint{ color:var(--muted); font-size:0.74rem; margin:-4px 0 10px; }
 
   .modal-overlay{ position:fixed; inset:0; background:rgba(36,20,66,0.35); backdrop-filter:blur(2px); display:flex; align-items:center; justify-content:center; padding:24px; z-index:50; }
   .modal-overlay.hidden{ display:none; }
@@ -163,9 +182,10 @@
       <div class="brand-sub">Aparte voorraad per lid</div>
     </div>
     <nav>
-      <button class="nav-item">Inventaris</button>
+      <button class="nav-item active" data-page="inventaris">Inventaris</button>
+      <button class="nav-item" data-page="verkoop">Verkoop</button>
     </nav>
-    <div class="sidebar-footer">Fase 1 · stap 1: Inventaris<br><a href="#" id="wipeAllLink" style="color:var(--muted); text-decoration:underline; cursor:pointer;">Wis alle testkaarten</a></div>
+    <div class="sidebar-footer">Fase 1 · stap 2: Verkoop<br><a href="#" id="wipeAllLink" style="color:var(--muted); text-decoration:underline; cursor:pointer;">Wis alle testkaarten</a></div>
   </aside>
 
   <main class="main">
@@ -182,24 +202,46 @@
       </div>
     </div>
 
-    <div class="view-header">
-      <div>
-        <h1 style="font-size:1.5rem;">Inventaris van <span id="invOwnerName">Brian</span></h1>
-        <div class="view-header-sub">Elke gebruiker heeft een eigen voorraad. Wissel van gebruiker hierboven — een nieuwe kaart (of scan) komt automatisch bij die persoon terecht. Wordt nu echt bewaard.</div>
+    <div id="view-inventaris" class="view">
+      <div class="view-header">
+        <div>
+          <h1 style="font-size:1.5rem;">Inventaris van <span id="invOwnerName">Brian</span></h1>
+          <div class="view-header-sub">Elke gebruiker heeft een eigen voorraad. Wissel van gebruiker hierboven — een nieuwe kaart (of scan) komt automatisch bij die persoon terecht. Wordt nu echt bewaard.</div>
+        </div>
+        <button class="btn-primary" id="openModalBtn">+ Kaart toevoegen</button>
       </div>
-      <button class="btn-primary" id="openModalBtn">+ Kaart toevoegen</button>
+
+      <div class="tabs" id="invTabs">
+        <button class="tab active" data-tab="te koop">Voorraad</button>
+        <button class="tab" data-tab="verkocht">Verkocht</button>
+      </div>
+
+      <div class="toolbar">
+        <input type="text" class="search-input" id="searchInput" placeholder="Zoek op naam of scan barcode…">
+      </div>
+
+      <div class="card-grid" id="invGrid"></div>
     </div>
 
-    <div class="tabs" id="invTabs">
-      <button class="tab active" data-tab="te koop">Voorraad</button>
-      <button class="tab" data-tab="verkocht">Verkocht</button>
-    </div>
+    <div id="view-verkoop" class="view hidden">
+      <div class="view-header">
+        <div>
+          <h1 style="font-size:1.5rem;">Verkoop — <span id="sellOwnerName">Brian</span></h1>
+          <div class="view-header-sub">Zoek of scan de kaart die verkocht wordt — kies daarna cash/Payconiq of ruil.</div>
+        </div>
+      </div>
 
-    <div class="toolbar">
-      <input type="text" class="search-input" id="searchInput" placeholder="Zoek op naam of scan barcode…">
-    </div>
+      <div class="stats" style="grid-template-columns:repeat(2,1fr); margin-bottom:24px;">
+        <div class="stat c-cyan"><div class="stat-label">Cash</div><div class="stat-value" id="cashBalance">€0</div><div class="stat-context">huidig saldo</div></div>
+        <div class="stat c-violet"><div class="stat-label">Payconiq</div><div class="stat-value" id="payconiqBalance">€0</div><div class="stat-context">huidig saldo</div></div>
+      </div>
 
-    <div class="card-grid" id="invGrid"></div>
+      <div class="toolbar">
+        <input type="text" class="search-input" id="sellSearchInput" placeholder="Zoek of scan barcode van de kaart…" style="max-width:420px;">
+      </div>
+
+      <div class="card-grid" id="sellGrid"></div>
+    </div>
 
   </main>
 </div>
@@ -247,6 +289,49 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="sellModalOverlay">
+  <div class="modal">
+    <h2 id="sellModalTitle">Kaart verkopen</h2>
+    <div class="modal-sub" id="sellModalSub">Vraagprijs €0</div>
+
+    <div class="tabs" id="sellPayTabs" style="margin-bottom:16px;">
+      <button type="button" class="tab active" data-pay="cash">Cash / Payconiq</button>
+      <button type="button" class="tab" data-pay="ruil">Ruil</button>
+    </div>
+
+    <form id="sellForm">
+      <div id="cashPane">
+        <div class="field"><label for="sPrice">Werkelijk verkocht voor (€)</label><input type="number" id="sPrice" min="0" step="0.5"></div>
+        <div class="field">
+          <label>Betaalmethode</label>
+          <div class="pay-toggle">
+            <button type="button" class="pay-option active" data-method="Cash">Cash</button>
+            <button type="button" class="pay-option" data-method="Payconiq">Payconiq</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="tradePane" class="hidden">
+        <div class="trade-hint">Elke aangeboden kaart telt voor "waarde × percentage". Standaard 80%, per kaart aanpasbaar.</div>
+        <div id="tradeRows"></div>
+        <button type="button" class="btn-ghost" id="addTradeRowBtn" style="margin-bottom:14px;">+ Kaart toevoegen</button>
+        <div class="trade-summary" id="tradeSummary"></div>
+        <div class="field hidden" id="tradeTopupField">
+          <label>Betaalmethode verschil</label>
+          <div class="pay-toggle">
+            <button type="button" class="pay-option active" data-topupmethod="Cash">Cash</button>
+            <button type="button" class="pay-option" data-topupmethod="Payconiq">Payconiq</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="closeSellModalBtn">Annuleren</button>
+        <button type="submit" class="btn-primary" id="sellConfirmBtn">Bevestig verkoop</button>
+      </div>
+    </form>
+  </div>
+</div>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script>
@@ -351,6 +436,214 @@
     }
   }
 
+  const navItems = document.querySelectorAll('.nav-item');
+  const views = { inventaris: document.getElementById('view-inventaris'), verkoop: document.getElementById('view-verkoop') };
+  navItems.forEach(item => {
+    item.addEventListener('click', () => {
+      navItems.forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      Object.values(views).forEach(v => v.classList.add('hidden'));
+      views[item.dataset.page].classList.remove('hidden');
+      if(item.dataset.page === 'verkoop'){ renderSellGrid(); loadBalances(); }
+    });
+  });
+
+  const sellOwnerName = document.getElementById('sellOwnerName');
+
+  // ===== Verkoop: sell grid =====
+  const sellGrid = document.getElementById('sellGrid');
+  const sellSearchInput = document.getElementById('sellSearchInput');
+
+  function sellTileHTML(c){
+    const bgClass = 'cond-bg-' + (condArtMap[c.cond] || 'top');
+    const letter = (c.name || '?').charAt(0).toUpperCase();
+    const imgTag = c.image ? `<img src="${c.image}" alt="${c.name}" loading="lazy" onerror="this.style.display='none'">` : '';
+    return `<div class="card-tile sell-tile" data-barcode="${c.barcode}">
+      <div class="card-art ${bgClass}">
+        ${imgTag}
+        <div class="card-monogram">${letter}</div>
+        <div class="card-art-shine"></div>
+        <span class="cond-chip">${c.cond}</span>
+      </div>
+      <div class="card-info">
+        <div class="card-barcode mono">${c.barcode}</div>
+        <div class="card-title">${c.name}</div>
+        <div class="card-subtitle">${c.set || ''}</div>
+        <div class="sell-price-row"><span class="price-label">Vraagprijs</span><span class="price-mono">€${c.ask}</span></div>
+      </div>
+    </div>`;
+  }
+
+  function renderSellGrid(){
+    const q = sellSearchInput.value.trim().toLowerCase();
+    const filtered = cardsData.filter(c => c.status === 'te koop' && c.owner === activeInitial && (!q || (c.name + ' ' + c.set + ' ' + c.barcode).toLowerCase().includes(q)));
+    sellGrid.innerHTML = filtered.length === 0
+      ? '<div class="empty-state">Geen kaarten te koop.</div>'
+      : filtered.map(sellTileHTML).join('');
+  }
+  sellSearchInput.addEventListener('input', renderSellGrid);
+
+  // ===== Verkoop: modal (cash of ruil) =====
+  const sellModalOverlay = document.getElementById('sellModalOverlay');
+  const sellModalTitle = document.getElementById('sellModalTitle');
+  const sellModalSub = document.getElementById('sellModalSub');
+  const sellForm = document.getElementById('sellForm');
+  const sellConfirmBtn = document.getElementById('sellConfirmBtn');
+  const cashPane = document.getElementById('cashPane');
+  const tradePane = document.getElementById('tradePane');
+  const tradeRowsEl = document.getElementById('tradeRows');
+  const tradeSummaryEl = document.getElementById('tradeSummary');
+  const tradeTopupField = document.getElementById('tradeTopupField');
+  let selectedSellCard = null;
+  let cashMethod = 'Cash';
+  let topupMethod = 'Cash';
+
+  sellGrid.addEventListener('click', (e) => {
+    const tile = e.target.closest('.sell-tile');
+    if(!tile) return;
+    const card = cardsData.find(c => c.barcode === tile.dataset.barcode);
+    if(card) openSellModal(card);
+  });
+
+  function openSellModal(card){
+    selectedSellCard = card;
+    sellModalTitle.textContent = card.name;
+    sellModalSub.textContent = 'Vraagprijs €' + card.ask + ' · ' + card.barcode;
+    document.getElementById('sPrice').value = card.ask;
+    cashMethod = 'Cash';
+    cashPane.querySelectorAll('.pay-option').forEach(b => b.classList.toggle('active', b.dataset.method === 'Cash'));
+    tradeRowsEl.innerHTML = '';
+    addTradeRow();
+    document.querySelector('#sellPayTabs .tab[data-pay="cash"]').click();
+    sellModalOverlay.classList.remove('hidden');
+  }
+  function closeSellModal(){ sellModalOverlay.classList.add('hidden'); selectedSellCard = null; }
+  document.getElementById('closeSellModalBtn').addEventListener('click', closeSellModal);
+  sellModalOverlay.addEventListener('click', (e) => { if(e.target === sellModalOverlay) closeSellModal(); });
+  document.addEventListener('keydown', (e) => { if(e.key === 'Escape' && !sellModalOverlay.classList.contains('hidden')) closeSellModal(); });
+
+  document.querySelectorAll('#sellPayTabs .tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('#sellPayTabs .tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      const pay = t.dataset.pay;
+      cashPane.classList.toggle('hidden', pay !== 'cash');
+      tradePane.classList.toggle('hidden', pay !== 'ruil');
+      sellConfirmBtn.textContent = pay === 'cash' ? 'Bevestig verkoop' : 'Bevestig ruil';
+    });
+  });
+
+  cashPane.addEventListener('click', (e) => {
+    const btn = e.target.closest('.pay-option');
+    if(!btn) return;
+    cashPane.querySelectorAll('.pay-option').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    cashMethod = btn.dataset.method;
+  });
+
+  tradeTopupField.addEventListener('click', (e) => {
+    const btn = e.target.closest('.pay-option');
+    if(!btn) return;
+    tradeTopupField.querySelectorAll('.pay-option').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    topupMethod = btn.dataset.topupmethod;
+  });
+
+  function addTradeRow(){
+    const div = document.createElement('div');
+    div.className = 'trade-row';
+    div.innerHTML = `
+      <input type="text" class="tr-name" placeholder="Naam kaart">
+      <input type="number" class="tr-value" placeholder="Waarde €" min="0" step="0.5">
+      <input type="number" class="tr-pct" value="80" min="0" max="100">
+      <button type="button" class="tr-remove" title="Verwijder rij">×</button>
+    `;
+    tradeRowsEl.appendChild(div);
+    div.querySelectorAll('input').forEach(inp => inp.addEventListener('input', updateTradeSummary));
+    div.querySelector('.tr-remove').addEventListener('click', () => { div.remove(); updateTradeSummary(); });
+    updateTradeSummary();
+  }
+  document.getElementById('addTradeRowBtn').addEventListener('click', addTradeRow);
+
+  function updateTradeSummary(){
+    const rows = tradeRowsEl.querySelectorAll('.trade-row');
+    let total = 0;
+    rows.forEach(row => {
+      const value = parseFloat(row.querySelector('.tr-value').value) || 0;
+      const pctRaw = parseFloat(row.querySelector('.tr-pct').value);
+      const pct = isNaN(pctRaw) ? 80 : pctRaw;
+      total += value * pct / 100;
+    });
+    total = +total.toFixed(2);
+    const ask = selectedSellCard ? parseFloat(selectedSellCard.ask) : 0;
+    const diff = +(total - ask).toFixed(2);
+    if(Math.abs(diff) < 0.01){
+      tradeSummaryEl.innerHTML = `Ruilwaarde: <strong>€${total.toFixed(2)}</strong> — exact gelijk, geen bijleg nodig.`;
+      tradeTopupField.classList.add('hidden');
+    } else if(diff < 0){
+      tradeSummaryEl.innerHTML = `Ruilwaarde: <strong>€${total.toFixed(2)}</strong> — koper legt <strong>€${Math.abs(diff).toFixed(2)}</strong> bij.`;
+      tradeTopupField.classList.remove('hidden');
+    } else {
+      tradeSummaryEl.innerHTML = `Ruilwaarde: <strong>€${total.toFixed(2)}</strong> — jij legt <strong>€${diff.toFixed(2)}</strong> bij.`;
+      tradeTopupField.classList.remove('hidden');
+    }
+    tradeSummaryEl.dataset.diff = diff;
+    tradeSummaryEl.dataset.total = total;
+  }
+
+  sellForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if(!selectedSellCard) return;
+    const activePay = document.querySelector('#sellPayTabs .tab.active').dataset.pay;
+
+    if(activePay === 'cash'){
+      const price = parseFloat(document.getElementById('sPrice').value) || 0;
+      db.ref('cards/' + selectedSellCard.barcode).update({ status:'verkocht', soldPrice: price, soldMethod: cashMethod });
+      adjustBalance(cashMethod, price);
+    } else {
+      const rows = [...tradeRowsEl.querySelectorAll('.trade-row')].map(row => {
+        const pctRaw = parseFloat(row.querySelector('.tr-pct').value);
+        return {
+          name: row.querySelector('.tr-name').value.trim() || 'Ruilkaart',
+          value: parseFloat(row.querySelector('.tr-value').value) || 0,
+          pct: isNaN(pctRaw) ? 80 : pctRaw
+        };
+      }).filter(r => r.value > 0);
+
+      const diff = parseFloat(tradeSummaryEl.dataset.diff) || 0;
+      const total = parseFloat(tradeSummaryEl.dataset.total) || 0;
+
+      db.ref('cards/' + selectedSellCard.barcode).update({ status:'verkocht', soldPrice: total, soldMethod:'ruil' });
+
+      rows.forEach(r => {
+        lastCode += 1;
+        const newBarcode = 'MTC-' + String(lastCode).padStart(6, '0');
+        db.ref('cards/' + newBarcode).set({
+          barcode: newBarcode, name: r.name, set:'', cond:'Near Mint',
+          buy: +(r.value * r.pct / 100).toFixed(2), ask: r.value, status:'te koop', owner: activeInitial
+        });
+      });
+
+      if(Math.abs(diff) >= 0.01){ adjustBalance(topupMethod, -diff); }
+    }
+    closeSellModal();
+  });
+
+  // ===== Kas (cash/Payconiq saldo) =====
+  let balances = { cash:0, bank:0 };
+  function loadBalances(){
+    db.ref('balance').on('value', snap => {
+      balances = snap.val() || { cash:0, bank:0 };
+      document.getElementById('cashBalance').textContent = '€' + (balances.cash || 0);
+      document.getElementById('payconiqBalance').textContent = '€' + (balances.bank || 0);
+    });
+  }
+  function adjustBalance(method, amount){
+    const key = method === 'Payconiq' ? 'bank' : 'cash';
+    const newVal = +(((balances[key]) || 0) + amount).toFixed(2);
+    db.ref('balance/' + key).set(newVal);
+  }
+
   avatars.forEach(a => {
     a.addEventListener('click', () => {
       avatars.forEach(x => x.classList.remove('active'));
@@ -358,7 +651,10 @@
       activeInitial = a.dataset.initial;
       greeting.textContent = 'Welkom terug, ' + a.dataset.name;
       invOwnerName.textContent = a.dataset.name;
+      sellOwnerName.textContent = a.dataset.name;
       renderGrid();
+      renderSellGrid();
+      loadBalances();
     });
   });
 
