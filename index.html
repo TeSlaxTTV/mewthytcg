@@ -163,15 +163,13 @@
   .lookup-status{ color:var(--muted); font-size:0.78rem; padding:8px 10px; }
 
   #csResults{ max-height:400px; overflow-y:auto; border:1px solid var(--line-strong); border-radius:var(--radius-sm); margin-bottom:6px; }
-  .cs-row{ display:flex; align-items:center; gap:10px; padding:9px 12px; border-bottom:1px solid var(--line); }
+  .cs-row{ display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
   .cs-row:last-child{ border-bottom:none; }
-  .cs-row.selected{ background:var(--surface-raised); }
-  .cs-check{ width:20px; height:20px; flex-shrink:0; accent-color:var(--violet); cursor:pointer; }
+  .cs-row:hover{ background:var(--surface-raised); }
   .cs-thumb{ width:32px; height:44px; object-fit:cover; border-radius:4px; flex-shrink:0; background:var(--surface-raised); }
   .cs-info{ flex:1; min-width:0; }
   .cs-name{ font-weight:600; font-size:0.85rem; }
   .cs-set{ color:var(--muted); font-size:0.72rem; }
-  .cs-price{ width:90px; flex-shrink:0; background:var(--surface); border:1px solid var(--line-strong); border-radius:8px; padding:7px 8px; font-size:0.83rem; font-family:inherit; }
 
   .sale-item-row{ display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); }
   .sale-item-row:last-child{ border-bottom:none; }
@@ -290,7 +288,7 @@
 <!-- ===== TOEVOEGEN MODAL ===== -->
 <div class="modal-overlay hidden" id="addModalOverlay">
   <div class="modal">
-    <h2>Item toevoegen</h2>
+    <h2 id="addModalTitle">Item toevoegen</h2>
     <div class="modal-sub">Komt bij de voorraad van <strong id="addOwnerName">Brian</strong>.</div>
     <form id="addForm">
       <div class="field">
@@ -328,12 +326,13 @@
         <div class="field"><label>Grading</label>
           <select id="fGrader"><option>PSA</option><option>BGS</option><option>CGC</option><option>Other</option></select>
         </div>
-        <div class="field"><label>Grade</label><input type="text" id="fGrade" placeholder="bv. 9"></div>
+        <div class="field"><label>Grade</label><input type="number" id="fGrade" min="1" max="10" step="0.5" placeholder="bv. 9.5"></div>
       </div>
       <div class="field-row">
         <div class="field"><label>Selling price (€)</label><input type="number" id="fSelling" min="0" step="0.5" required></div>
         <div class="field"><label>Purchase price (€, optioneel)</label><input type="number" id="fPurchase" min="0" step="0.5" placeholder="—"></div>
       </div>
+      <div class="field" id="qtyField"><label>Aantal (identieke exemplaren)</label><input type="number" id="fQty" min="1" max="50" value="1"></div>
       <div class="field">
         <label>Acquisition method</label>
         <div class="seg" id="acqSeg">
@@ -346,26 +345,24 @@
       </div>
       <div class="modal-actions">
         <button type="button" class="btn-ghost" id="closeAddBtn">Annuleren</button>
-        <button type="submit" class="btn-primary">Toevoegen</button>
+        <button type="submit" class="btn-primary" id="addSubmitBtn">Toevoegen</button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- ===== BULK CARD SEARCH MODAL ===== -->
+<!-- ===== CARD SEARCH MODAL ===== -->
 <div class="modal-overlay hidden" id="csModalOverlay">
   <div class="modal wide" style="max-width:680px;">
     <h2>Kaarten zoeken</h2>
-    <div class="modal-sub">Vink aan wat je wil toevoegen, vul per kaart de verkoopprijs in. Meerdere tegelijk kan.</div>
+    <div class="modal-sub">Klik een kaart aan om ze te kiezen — je komt dan terug in het formulier om conditie, prijs enz. in te vullen.</div>
     <div class="field-row">
       <div class="field"><label>Naam</label><input type="text" id="csName" placeholder="bv. Charizard"></div>
       <div class="field"><label>Card number (optioneel)</label><input type="text" id="csNumber" placeholder="bv. 199/197"></div>
     </div>
-    <button type="button" class="btn-primary" id="csSearchBtn" style="margin-bottom:14px;">Zoeken</button>
-    <div id="csResults"><div class="lookup-status">Typ een naam en klik Zoeken.</div></div>
+    <div id="csResults"><div class="lookup-status">Typ minstens 2 letters om te zoeken.</div></div>
     <div class="modal-actions">
       <button type="button" class="btn-ghost" id="csCloseBtn">Annuleren</button>
-      <button type="button" class="btn-primary" id="csAddSelectedBtn">Geselecteerde toevoegen (<span id="csSelectedCount">0</span>)</button>
     </div>
   </div>
 </div>
@@ -384,7 +381,8 @@
     <div class="acq-box" id="detailAcqBox"></div>
     <div class="modal-actions">
       <button type="button" class="btn-ghost" id="deleteItemBtn" style="color:#B4231F; border-color:#F3C9C9;">Delete</button>
-      <button type="button" class="btn-ghost" id="closeDetailBtn">Sluiten</button>
+      <button type="button" class="btn-ghost" id="editItemBtn">Bewerken</button>
+      <button type="button" class="btn-primary" id="closeDetailBtn">Sluiten</button>
     </div>
   </div>
 </div>
@@ -611,17 +609,15 @@
 
   let selectedImage = null;
   let csFound = [];
-  let csSelected = new Set();
 
   function openCardSearchModal(){
     document.getElementById('csName').value = document.getElementById('fName').value.trim();
     document.getElementById('csNumber').value = '';
-    csFound = []; csSelected = new Set();
-    document.getElementById('csResults').innerHTML = '<div class="lookup-status">Typ een naam en klik Zoeken.</div>';
-    updateCsCount();
+    csFound = [];
+    document.getElementById('csResults').innerHTML = '<div class="lookup-status">Typ minstens 2 letters om te zoeken.</div>';
     document.getElementById('csModalOverlay').classList.remove('hidden');
     document.getElementById('csName').focus();
-    if(document.getElementById('csName').value) csSearch();
+    if(document.getElementById('csName').value.trim().length >= 2) csSearch();
   }
   document.getElementById('lookupBtn').addEventListener('click', openCardSearchModal);
   document.getElementById('csCloseBtn').addEventListener('click', () => document.getElementById('csModalOverlay').classList.add('hidden'));
@@ -631,7 +627,7 @@
     const name = document.getElementById('csName').value.trim();
     const number = document.getElementById('csNumber').value.trim();
     const box = document.getElementById('csResults');
-    if(!name){ box.innerHTML = '<div class="lookup-status">Typ minstens een naam.</div>'; return; }
+    if(!name){ box.innerHTML = '<div class="lookup-status">Typ minstens 2 letters om te zoeken.</div>'; return; }
     box.innerHTML = '<div class="lookup-status">Zoeken…</div>';
     let url = 'https://api.tcgdex.net/v2/en/cards?name=' + encodeURIComponent(name);
     if(number) url += '&localId=' + encodeURIComponent(number);
@@ -640,27 +636,17 @@
       if(!res.ok) throw new Error('fail');
       const data = await res.json();
       csFound = (data || []).slice(0, 40);
-      csSelected = new Set();
-      updateCsCount();
       if(csFound.length===0){ box.innerHTML = '<div class="lookup-status">Geen resultaten — probeer een andere naam of pas het nummer aan.</div>'; return; }
       box.innerHTML = csFound.map((c,i) => `
         <div class="cs-row" data-idx="${i}">
-          <input type="checkbox" class="cs-check">
           <img class="cs-thumb" src="${c.image ? c.image+'/low.png' : ''}" alt="" onerror="this.style.visibility='hidden'">
           <div class="cs-info"><div class="cs-name">${c.name}</div><div class="cs-set">#${c.localId||''} · ${c.id}</div></div>
-          <input type="number" class="cs-price mono" placeholder="€ prijs" step="0.5" min="0">
         </div>`).join('');
       box.querySelectorAll('.cs-row').forEach(row => {
-        const idx = parseInt(row.dataset.idx,10);
-        row.querySelector('.cs-check').addEventListener('change', (e) => {
-          if(e.target.checked) csSelected.add(idx); else csSelected.delete(idx);
-          row.classList.toggle('selected', e.target.checked);
-          updateCsCount();
-        });
+        row.addEventListener('click', () => csPickCard(csFound[parseInt(row.dataset.idx,10)]));
       });
     } catch(err){ console.error(err); box.innerHTML = '<div class="lookup-status">Opzoeken mislukt — probeer opnieuw.</div>'; }
   }
-  document.getElementById('csSearchBtn').addEventListener('click', csSearch);
   document.getElementById('csName').addEventListener('keydown', (e) => { if(e.key==='Enter'){ e.preventDefault(); csSearch(); } });
   document.getElementById('csNumber').addEventListener('keydown', (e) => { if(e.key==='Enter'){ e.preventDefault(); csSearch(); } });
   document.getElementById('csName').addEventListener('input', () => {
@@ -672,42 +658,26 @@
     csDebounce = setTimeout(() => { if(document.getElementById('csName').value.trim()) csSearch(); }, 300);
   });
 
-  function updateCsCount(){ document.getElementById('csSelectedCount').textContent = csSelected.size; }
-
-  document.getElementById('csAddSelectedBtn').addEventListener('click', async () => {
-    if(csSelected.size === 0) return;
-    const rows = document.querySelectorAll('#csResults .cs-row');
-    const btn = document.getElementById('csAddSelectedBtn');
-    btn.disabled = true;
-    const selections = [...csSelected].map(idx => {
-      const c = csFound[idx];
-      const row = [...rows].find(r => parseInt(r.dataset.idx,10) === idx);
-      const price = parseFloat(row.querySelector('.cs-price').value) || 0;
-      return { c, price };
-    });
-    const details = await Promise.all(selections.map(s =>
-      fetch('https://api.tcgdex.net/v2/en/cards/' + s.c.id).then(r => r.ok ? r.json() : null).catch(() => null)
-    ));
-    selections.forEach((s, i) => {
-      const full = details[i];
-      const id = genId();
-      const item = {
-        id, name: s.c.name, cardNumber: s.c.localId || '', set: (full && full.set && full.set.name) || '',
-        barcode: id, itemType: 'Raw', condition: 'NM', gradingCompany: null, grade: null,
-        sellingPrice: s.price, purchasePrice: null, tradeValue: null,
-        acquisitionMethod: 'Cash', acquisitionDetails: null,
-        owner: activeInitial, status: 'voorraad', createdAt: Date.now()
-      };
-      const imgBase = (full && full.image) || s.c.image;
-      if(imgBase) item.image = imgBase + '/high.png';
-      saveItem(item);
-    });
-    btn.disabled = false;
+  async function csPickCard(c){
+    document.getElementById('fName').value = c.name;
+    document.getElementById('fNumber').value = c.localId || '';
     document.getElementById('csModalOverlay').classList.add('hidden');
-    document.getElementById('addModalOverlay').classList.add('hidden');
-  });
+    try{
+      const res = await fetch('https://api.tcgdex.net/v2/en/cards/' + c.id);
+      const full = res.ok ? await res.json() : null;
+      document.getElementById('fSet').value = (full && full.set && full.set.name) || '';
+      const imgBase = (full && full.image) || c.image;
+      if(imgBase) selectedImage = imgBase + '/high.png';
+    } catch(err){ console.error(err); }
+  }
+
+  let editingItemId = null;
 
   function openAddModal(){
+    editingItemId = null;
+    document.getElementById('addModalTitle').textContent = 'Item toevoegen';
+    document.getElementById('addSubmitBtn').textContent = 'Toevoegen';
+    document.getElementById('qtyField').classList.remove('hidden');
     document.getElementById('addForm').reset();
     document.getElementById('addOwnerName').textContent = activeUserName();
     selectedImage = null;
@@ -719,28 +689,65 @@
   document.getElementById('openAddBtn').addEventListener('click', openAddModal);
   document.getElementById('closeAddBtn').addEventListener('click', () => document.getElementById('addModalOverlay').classList.add('hidden'));
 
+  function openEditModal(item){
+    editingItemId = item.id;
+    document.getElementById('addModalTitle').textContent = 'Item bewerken';
+    document.getElementById('addSubmitBtn').textContent = 'Opslaan';
+    document.getElementById('qtyField').classList.add('hidden');
+    document.getElementById('addOwnerName').textContent = activeUserName();
+    selectedImage = item.image || null;
+    document.getElementById('fName').value = item.name || '';
+    document.getElementById('fNumber').value = item.cardNumber || '';
+    document.getElementById('fSet').value = item.set || '';
+    document.getElementById('fBarcode').value = item.barcode || '';
+    const type = item.itemType || 'Raw';
+    setActiveSeg('typeSeg', type); toggleCondFields(type);
+    setActiveSeg('condRawSeg', item.condition || 'NM');
+    if(item.gradingCompany) document.getElementById('fGrader').value = item.gradingCompany;
+    document.getElementById('fGrade').value = item.grade || '';
+    document.getElementById('fSelling').value = item.sellingPrice != null ? item.sellingPrice : '';
+    document.getElementById('fPurchase').value = item.purchasePrice != null ? item.purchasePrice : '';
+    setActiveSeg('acqSeg', item.acquisitionMethod || 'Cash');
+    document.getElementById('detailModalOverlay').classList.add('hidden');
+    document.getElementById('addModalOverlay').classList.remove('hidden');
+    document.getElementById('fName').focus();
+  }
+  document.getElementById('editItemBtn').addEventListener('click', () => { if(currentDetailItem) openEditModal(currentDetailItem); });
+
   function saveItem(item){ db.ref('items/' + item.id).set(item).catch(err => console.error('Opslaan mislukt:', err)); }
 
   document.getElementById('addForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const type = getActiveSeg('typeSeg','type');
     const purchaseRaw = document.getElementById('fPurchase').value;
-    const barcodeInput = document.getElementById('fBarcode').value.trim();
-    const id = barcodeInput || genId();
-    const item = {
-      id, name: document.getElementById('fName').value.trim() || 'Naamloos item',
+    const baseFields = {
+      name: document.getElementById('fName').value.trim() || 'Naamloos item',
       cardNumber: document.getElementById('fNumber').value.trim(), set: document.getElementById('fSet').value.trim(),
-      barcode: barcodeInput || id, itemType: type,
+      itemType: type,
       condition: type === 'Raw' ? getActiveSeg('condRawSeg','cond') : null,
       gradingCompany: type === 'Slab' ? document.getElementById('fGrader').value : null,
       grade: type === 'Slab' ? document.getElementById('fGrade').value.trim() : null,
       sellingPrice: parseFloat(document.getElementById('fSelling').value) || 0,
       purchasePrice: purchaseRaw === '' ? null : parseFloat(purchaseRaw),
-      tradeValue: null, acquisitionMethod: getActiveSeg('acqSeg','acq'), acquisitionDetails: null,
-      owner: activeInitial, status: 'voorraad', createdAt: Date.now()
     };
-    if(selectedImage) item.image = selectedImage;
-    saveItem(item);
+    if(selectedImage) baseFields.image = selectedImage;
+
+    if(editingItemId){
+      db.ref('items/' + editingItemId).update(baseFields).catch(err => console.error('Opslaan mislukt:', err));
+      editingItemId = null;
+    } else {
+      const barcodeInput = document.getElementById('fBarcode').value.trim();
+      const qty = Math.max(1, Math.min(50, parseInt(document.getElementById('fQty').value, 10) || 1));
+      for(let n = 0; n < qty; n++){
+        const id = (barcodeInput && qty === 1) ? barcodeInput : genId();
+        const item = Object.assign({}, baseFields, {
+          id, barcode: (barcodeInput && qty === 1) ? barcodeInput : id,
+          tradeValue: null, acquisitionMethod: getActiveSeg('acqSeg','acq'), acquisitionDetails: null,
+          owner: activeInitial, status: 'voorraad', createdAt: Date.now()
+        });
+        saveItem(item);
+      }
+    }
     document.getElementById('addModalOverlay').classList.add('hidden');
   });
 
