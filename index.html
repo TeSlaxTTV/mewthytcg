@@ -625,7 +625,6 @@
   }
   document.getElementById('lookupBtn').addEventListener('click', openCardSearchModal);
   document.getElementById('csCloseBtn').addEventListener('click', () => document.getElementById('csModalOverlay').classList.add('hidden'));
-  document.getElementById('csModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='csModalOverlay') e.currentTarget.classList.add('hidden'); });
 
   let csDebounce = null;
   async function csSearch(){
@@ -719,7 +718,6 @@
   }
   document.getElementById('openAddBtn').addEventListener('click', openAddModal);
   document.getElementById('closeAddBtn').addEventListener('click', () => document.getElementById('addModalOverlay').classList.add('hidden'));
-  document.getElementById('addModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='addModalOverlay') e.currentTarget.classList.add('hidden'); });
 
   function saveItem(item){ db.ref('items/' + item.id).set(item).catch(err => console.error('Opslaan mislukt:', err)); }
 
@@ -766,7 +764,6 @@
     document.getElementById('detailModalOverlay').classList.remove('hidden');
   }
   document.getElementById('closeDetailBtn').addEventListener('click', () => document.getElementById('detailModalOverlay').classList.add('hidden'));
-  document.getElementById('detailModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='detailModalOverlay') e.currentTarget.classList.add('hidden'); });
   document.getElementById('deleteItemBtn').addEventListener('click', () => {
     if(!currentDetailItem) return;
     if(confirm('Dit item verwijderen? Dit kan niet ongedaan gemaakt worden.')){
@@ -802,7 +799,6 @@
   document.getElementById('openSellTradeBtn').addEventListener('click', openSellTradeModal);
   function closeStModal(){ document.getElementById('sellTradeModalOverlay').classList.add('hidden'); }
   document.getElementById('closeStBtn').addEventListener('click', closeStModal);
-  document.getElementById('sellTradeModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='sellTradeModalOverlay') closeStModal(); });
   document.addEventListener('keydown', (e) => { if(e.key==='Escape' && !document.getElementById('sellTradeModalOverlay').classList.contains('hidden')) closeStModal(); });
 
   document.querySelectorAll('#stModeSeg .seg-btn').forEach(b => b.addEventListener('click', () => {
