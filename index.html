@@ -1016,8 +1016,8 @@
     const box = document.getElementById('stTradeSummaryBox');
     let msg = `Outgoing: <strong>€${outTotal.toFixed(2)}</strong> · Incoming (na %): <strong>€${inTotal.toFixed(2)}</strong> · Cash: <strong>€${cash.toFixed(2)}</strong><br>`;
     if(Math.abs(balance)<0.01){ msg+='Trade is in balans.'; }
-    else if(balance>0){ msg+=`Er ontbreekt nog <strong>€${balance.toFixed(2)}</strong>.`; }
-    else{ msg+=`Jij komt <strong>€${Math.abs(balance).toFixed(2)}</strong> te kort te geven.`; }
+    else if(balance>0){ msg+=`Er ontbreekt nog <strong style="color:#0B8F4F;">€${balance.toFixed(2)}</strong> — koper moet nog bijleggen.`; }
+    else{ msg+=`Jij komt <strong style="color:#B4231F;">€${Math.abs(balance).toFixed(2)}</strong> te kort te geven.`; }
     box.innerHTML = msg; box.dataset.balance = balance;
   }
 
