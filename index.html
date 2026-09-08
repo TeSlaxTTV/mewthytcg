@@ -627,27 +627,28 @@
   document.getElementById('csCloseBtn').addEventListener('click', () => document.getElementById('csModalOverlay').classList.add('hidden'));
   document.getElementById('csModalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='csModalOverlay') e.currentTarget.classList.add('hidden'); });
 
+  let csDebounce = null;
   async function csSearch(){
     const name = document.getElementById('csName').value.trim();
     const number = document.getElementById('csNumber').value.trim();
     const box = document.getElementById('csResults');
     if(!name){ box.innerHTML = '<div class="lookup-status">Typ minstens een naam.</div>'; return; }
     box.innerHTML = '<div class="lookup-status">Zoeken…</div>';
-    let query = 'name:"' + name + '"';
-    if(number) query += ' number:"' + number + '"';
+    let url = 'https://api.tcgdex.net/v2/en/cards?name=' + encodeURIComponent(name);
+    if(number) url += '&localId=' + encodeURIComponent(number);
     try{
-      const res = await fetch('https://api.pokemontcg.io/v2/cards?q=' + encodeURIComponent(query) + '&pageSize=30');
+      const res = await fetch(url);
       if(!res.ok) throw new Error('fail');
       const data = await res.json();
-      csFound = data.data || [];
+      csFound = (data || []).slice(0, 40);
       csSelected = new Set();
       updateCsCount();
       if(csFound.length===0){ box.innerHTML = '<div class="lookup-status">Geen resultaten — probeer een andere naam of pas het nummer aan.</div>'; return; }
       box.innerHTML = csFound.map((c,i) => `
         <div class="cs-row" data-idx="${i}">
           <input type="checkbox" class="cs-check">
-          <img class="cs-thumb" src="${(c.images&&c.images.small)||''}" alt="" onerror="this.style.visibility='hidden'">
-          <div class="cs-info"><div class="cs-name">${c.name}</div><div class="cs-set">${(c.set&&c.set.name)||''}${c.number?' · '+c.number:''}</div></div>
+          <img class="cs-thumb" src="${c.image ? c.image+'/low.png' : ''}" alt="" onerror="this.style.visibility='hidden'">
+          <div class="cs-info"><div class="cs-name">${c.name}</div><div class="cs-set">#${c.localId||''} · ${c.id}</div></div>
           <input type="number" class="cs-price mono" placeholder="€ prijs" step="0.5" min="0">
         </div>`).join('');
       box.querySelectorAll('.cs-row').forEach(row => {
@@ -663,28 +664,46 @@
   document.getElementById('csSearchBtn').addEventListener('click', csSearch);
   document.getElementById('csName').addEventListener('keydown', (e) => { if(e.key==='Enter'){ e.preventDefault(); csSearch(); } });
   document.getElementById('csNumber').addEventListener('keydown', (e) => { if(e.key==='Enter'){ e.preventDefault(); csSearch(); } });
+  document.getElementById('csName').addEventListener('input', () => {
+    clearTimeout(csDebounce);
+    csDebounce = setTimeout(() => { if(document.getElementById('csName').value.trim().length >= 2) csSearch(); }, 300);
+  });
+  document.getElementById('csNumber').addEventListener('input', () => {
+    clearTimeout(csDebounce);
+    csDebounce = setTimeout(() => { if(document.getElementById('csName').value.trim()) csSearch(); }, 300);
+  });
 
   function updateCsCount(){ document.getElementById('csSelectedCount').textContent = csSelected.size; }
 
-  document.getElementById('csAddSelectedBtn').addEventListener('click', () => {
+  document.getElementById('csAddSelectedBtn').addEventListener('click', async () => {
     if(csSelected.size === 0) return;
     const rows = document.querySelectorAll('#csResults .cs-row');
-    csSelected.forEach(idx => {
+    const btn = document.getElementById('csAddSelectedBtn');
+    btn.disabled = true;
+    const selections = [...csSelected].map(idx => {
       const c = csFound[idx];
       const row = [...rows].find(r => parseInt(r.dataset.idx,10) === idx);
       const price = parseFloat(row.querySelector('.cs-price').value) || 0;
+      return { c, price };
+    });
+    const details = await Promise.all(selections.map(s =>
+      fetch('https://api.tcgdex.net/v2/en/cards/' + s.c.id).then(r => r.ok ? r.json() : null).catch(() => null)
+    ));
+    selections.forEach((s, i) => {
+      const full = details[i];
       const id = genId();
       const item = {
-        id, name: c.name, cardNumber: c.number || '', set: (c.set && c.set.name) || '',
+        id, name: s.c.name, cardNumber: s.c.localId || '', set: (full && full.set && full.set.name) || '',
         barcode: id, itemType: 'Raw', condition: 'NM', gradingCompany: null, grade: null,
-        sellingPrice: price, purchasePrice: null, tradeValue: null,
+        sellingPrice: s.price, purchasePrice: null, tradeValue: null,
         acquisitionMethod: 'Cash', acquisitionDetails: null,
         owner: activeInitial, status: 'voorraad', createdAt: Date.now()
       };
-      const img = (c.images && (c.images.large || c.images.small)) || null;
-      if(img) item.image = img;
+      const imgBase = (full && full.image) || s.c.image;
+      if(imgBase) item.image = imgBase + '/high.png';
       saveItem(item);
     });
+    btn.disabled = false;
     document.getElementById('csModalOverlay').classList.add('hidden');
     document.getElementById('addModalOverlay').classList.add('hidden');
   });
