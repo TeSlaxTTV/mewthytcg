@@ -306,6 +306,7 @@
 
     <div class="toolbar" style="display:flex; gap:12px; margin:22px 0 16px; flex-wrap:wrap; align-items:center;">
       <input type="text" id="searchInput" placeholder="🔍 Zoek kaartnaam of scan barcode..." style="background:var(--surface); border:1px solid var(--line-strong); border-radius:var(--radius-sm); color:var(--text); padding:10px 14px; font-size:0.88rem; font-family:inherit; min-width:260px; flex:1; max-width:380px;">
+      <button type="button" class="btn-lookup" id="camScanInvBtn" title="Scan met camera">📷</button>
       <button type="button" class="btn-ghost" id="openLabelsBtn">🏷️ Labels printen</button>
     </div>
     <div id="filterChips" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px;"></div>
@@ -439,6 +440,7 @@
 
     <div style="display:flex; gap:12px; align-items:center; margin-bottom:14px; flex-wrap:wrap;">
       <input type="text" id="stSearchInput" placeholder="🔍 Scan barcode of typ kaartnaam..." style="flex:1; min-width:200px; background:var(--surface-raised); border:1px solid var(--line-strong); border-radius:var(--radius-sm); color:var(--text); padding:12px 14px; font-size:0.9rem; font-family:inherit;">
+      <button type="button" class="btn-lookup" id="camScanStBtn" title="Scan met camera">📷</button>
       <div class="st-mode-toggle" id="stModeSeg">
         <button type="button" class="st-mode-btn seg-btn cash active" data-mode="cash">CASH</button>
         <button type="button" class="st-mode-btn seg-btn trade" data-mode="trade">TRADE</button>
@@ -526,10 +528,24 @@
 
 <div id="printLabelsContainer"></div>
 
+<!-- ===== CAMERA BARCODE SCANNER ===== -->
+<div class="modal-overlay hidden" id="camScanOverlay">
+  <div class="modal">
+    <h2>Scan barcode</h2>
+    <div class="modal-sub">Richt de camera op de barcode.</div>
+    <div id="camReader" style="width:100%; border-radius:var(--radius-sm); overflow:hidden;"></div>
+    <div id="camScanStatus" style="text-align:center; color:var(--muted); font-size:0.82rem; margin-top:10px;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="closeCamScanBtn">Sluiten</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://unpkg.com/@mmote/niimbluelib@0.0.1-alpha.38/dist/umd/niimbluelib.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
   const firebaseConfig = {
     apiKey: "AIzaSyCF39KNiJfhAgm2ZPxOsY-2Q3JAk3tzsao",
@@ -1176,6 +1192,46 @@
   renderFilterChips();
   loadItems();
   loadTransactions();
+
+  // ===== Camera barcode scanner =====
+  let camScanner = null;
+  let camTargetInputId = null;
+
+  function openCamScanner(targetInputId){
+    if(!window.Html5Qrcode){ alert('Camera-scanner kon niet laden — check internetverbinding.'); return; }
+    camTargetInputId = targetInputId;
+    document.getElementById('camScanStatus').textContent = 'Camera starten…';
+    document.getElementById('camScanOverlay').classList.remove('hidden');
+    camScanner = new Html5Qrcode('camReader');
+    camScanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 250, height: 120 } },
+      (decodedText) => {
+        const input = document.getElementById(camTargetInputId);
+        input.value = decodedText;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        closeCamScanner();
+      },
+      () => { /* scan mislukt op dit frame, gewoon doorgaan */ }
+    ).then(() => {
+      document.getElementById('camScanStatus').textContent = 'Zoeken naar barcode…';
+    }).catch((err) => {
+      console.error('Camera fout:', err);
+      document.getElementById('camScanStatus').textContent = 'Camera kon niet starten: ' + (err.message || err) + ' (toestemming gegeven?)';
+    });
+  }
+
+  function closeCamScanner(){
+    document.getElementById('camScanOverlay').classList.add('hidden');
+    if(camScanner){
+      camScanner.stop().then(() => camScanner.clear()).catch(() => {});
+      camScanner = null;
+    }
+  }
+
+  document.getElementById('camScanInvBtn').addEventListener('click', () => openCamScanner('searchInput'));
+  document.getElementById('camScanStBtn').addEventListener('click', () => openCamScanner('stSearchInput'));
+  document.getElementById('closeCamScanBtn').addEventListener('click', closeCamScanner);
 
   // ===== Events (shared, not per-user) =====
   let eventsData = [];
