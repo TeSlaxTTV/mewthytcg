@@ -149,10 +149,11 @@
   #printLabelsContainer{ display:none; }
   @media print {
     body > *:not(#printLabelsContainer){ display:none !important; }
-    #printLabelsContainer{ display:grid !important; grid-template-columns:repeat(3, 1fr); gap:4mm; padding:6mm; }
-    .print-label{ border:1px dashed #999; border-radius:2mm; padding:3mm; text-align:center; page-break-inside:avoid; }
-    .print-label .label-name{ font-weight:700; font-size:10pt; margin-top:1.5mm; font-family:Arial, sans-serif; }
-    .print-label .label-price{ font-size:9pt; font-family:Arial, sans-serif; }
+    #printLabelsContainer{ display:flex !important; flex-wrap:wrap; gap:3mm; padding:5mm; }
+    .print-label{ width:40mm; height:30mm; box-sizing:border-box; border:1px dashed #999; border-radius:1.5mm; padding:1.5mm; text-align:center; page-break-inside:avoid; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; }
+    .print-label svg{ max-width:100%; height:auto; }
+    .print-label .label-name{ font-weight:700; font-size:7pt; margin-top:0.8mm; font-family:Arial, sans-serif; line-height:1.1; }
+    .print-label .label-price{ font-size:6.5pt; font-family:Arial, sans-serif; }
   }
   .chip{ background:var(--surface); border:1px solid var(--line-strong); color:var(--muted); border-radius:20px; padding:7px 14px; font-size:0.8rem; font-weight:700; cursor:pointer; }
   .chip.active{ color:#fff; background:linear-gradient(135deg, var(--pink), var(--violet)); border-color:transparent; }
@@ -1367,7 +1368,7 @@
         <div class="label-price">€${it.sellingPrice}</div>
       </div>`).join('');
     items.forEach(it => {
-      try{ JsBarcode('#bc-' + it.id, it.barcode || it.id, { format:'CODE128', width:1.4, height:32, displayValue:true, fontSize:10, margin:2 }); }
+      try{ JsBarcode('#bc-' + it.id, it.barcode || it.id, { format:'CODE128', width:0.9, height:16, displayValue:false, margin:0 }); }
       catch(err){ console.error('Barcode genereren mislukt:', err); }
     });
     document.getElementById('labelsModalOverlay').classList.add('hidden');
