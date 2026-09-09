@@ -129,6 +129,31 @@
   .top5-tile .rank-badge{ position:absolute; top:8px; left:8px; width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,0.92); color:var(--text); font-family:'JetBrains Mono',monospace; font-weight:700; font-size:0.72rem; display:flex; align-items:center; justify-content:center; }
 
   .empty-state{ grid-column:1/-1; padding:48px 16px; text-align:center; color:var(--muted); font-size:0.88rem; }
+
+  .event-card{ display:flex; gap:14px; align-items:flex-start; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; margin-bottom:10px; }
+  .event-date-badge{ flex-shrink:0; width:52px; text-align:center; background:linear-gradient(160deg, var(--pink), var(--violet)); border-radius:10px; padding:8px 4px; color:#fff; }
+  .event-day{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1.3rem; line-height:1; }
+  .event-month{ font-size:0.62rem; font-weight:700; letter-spacing:0.03em; margin-top:2px; }
+  .event-card.past .event-date-badge{ background:var(--surface-raised); color:var(--muted); }
+  .event-main{ flex:1; min-width:0; }
+  .event-name{ font-weight:700; font-size:0.95rem; }
+  .event-meta{ color:var(--muted); font-size:0.8rem; margin-top:3px; }
+  .event-notes{ color:var(--muted); font-size:0.78rem; margin-top:6px; font-style:italic; }
+  .paid-badge{ font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:10px; }
+  .paid-badge.paid{ background:var(--cyan); color:var(--text); }
+  .paid-badge.unpaid{ background:var(--amber); color:var(--text); }
+  .event-actions{ display:flex; gap:6px; flex-shrink:0; }
+  .event-actions button{ background:none; border:1px solid var(--line-strong); border-radius:8px; width:30px; height:30px; cursor:pointer; color:var(--muted); }
+  .event-actions button:hover{ color:var(--text); }
+
+  #printLabelsContainer{ display:none; }
+  @media print {
+    body > *:not(#printLabelsContainer){ display:none !important; }
+    #printLabelsContainer{ display:grid !important; grid-template-columns:repeat(3, 1fr); gap:4mm; padding:6mm; }
+    .print-label{ border:1px dashed #999; border-radius:2mm; padding:3mm; text-align:center; page-break-inside:avoid; }
+    .print-label .label-name{ font-weight:700; font-size:10pt; margin-top:1.5mm; font-family:Arial, sans-serif; }
+    .print-label .label-price{ font-size:9pt; font-family:Arial, sans-serif; }
+  }
   .chip{ background:var(--surface); border:1px solid var(--line-strong); color:var(--muted); border-radius:20px; padding:7px 14px; font-size:0.8rem; font-weight:700; cursor:pointer; }
   .chip.active{ color:#fff; background:linear-gradient(135deg, var(--pink), var(--violet)); border-color:transparent; }
 
@@ -233,6 +258,7 @@
   <div class="nav-center">
     <button class="nav-link active" data-page="dashboard">Dashboard</button>
     <button class="nav-link" data-page="inventaris">Inventaris</button>
+    <button class="nav-link" data-page="events">Events</button>
     <button class="nav-add-circle" id="openAddBtn" title="Item toevoegen" aria-label="Item toevoegen">+</button>
     <button class="nav-link" id="openSellTradeBtn">Verkopen</button>
   </div>
@@ -280,10 +306,25 @@
 
     <div class="toolbar" style="display:flex; gap:12px; margin:22px 0 16px; flex-wrap:wrap; align-items:center;">
       <input type="text" id="searchInput" placeholder="🔍 Zoek kaartnaam of scan barcode..." style="background:var(--surface); border:1px solid var(--line-strong); border-radius:var(--radius-sm); color:var(--text); padding:10px 14px; font-size:0.88rem; font-family:inherit; min-width:260px; flex:1; max-width:380px;">
+      <button type="button" class="btn-ghost" id="openLabelsBtn">🏷️ Labels printen</button>
     </div>
     <div id="filterChips" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px;"></div>
 
     <div class="card-grid" id="invGrid"></div>
+  </div>
+
+  <div id="view-events" class="view hidden">
+    <div class="view-header">
+      <div>
+        <h1 class="page-title">Events</h1>
+        <div class="page-sub">Gedeelde agenda — voor het hele team, ongeacht wie er is ingelogd.</div>
+      </div>
+      <button class="btn-primary" id="openEventModalBtn">+ Event toevoegen</button>
+    </div>
+    <div class="subhead">Aankomend</div>
+    <div id="upcomingEventsList"><div class="empty-state">Nog geen aankomende events.</div></div>
+    <div class="subhead" style="margin-top:26px;">Verleden</div>
+    <div id="pastEventsList"><div class="empty-state">Nog geen verleden events.</div></div>
   </div>
 
 </div>
@@ -436,8 +477,55 @@
   </div>
 </div>
 
+<!-- ===== EVENT MODAL ===== -->
+<div class="modal-overlay hidden" id="eventModalOverlay">
+  <div class="modal">
+    <h2 id="eventModalTitle">Event toevoegen</h2>
+    <div class="modal-sub">Gedeeld met het hele team.</div>
+    <form id="eventForm">
+      <div class="field"><label>Naam event</label><input type="text" id="evName" placeholder="bv. Antwerpen Kaartenbeurs" required></div>
+      <div class="field-row">
+        <div class="field"><label>Datum</label><input type="date" id="evDate" required></div>
+        <div class="field"><label>Tafelprijs (€)</label><input type="number" id="evPrice" min="0" step="0.5" placeholder="0"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Afmetingen</label><input type="text" id="evDims" placeholder="bv. 180x80cm"></div>
+        <div class="field"><label>Betaald?</label>
+          <div class="seg" id="evPaidSeg">
+            <button type="button" class="seg-btn active" data-paid="no">Nee</button>
+            <button type="button" class="seg-btn" data-paid="yes">Ja</button>
+          </div>
+        </div>
+      </div>
+      <div class="field"><label>Notities (optioneel)</label><textarea id="evNotes" rows="3" placeholder="bv. vroeg komen, ingang B..."></textarea></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="closeEventBtn">Annuleren</button>
+        <button type="submit" class="btn-primary" id="eventSubmitBtn">Toevoegen</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== LABELS PRINT MODAL ===== -->
+<div class="modal-overlay hidden" id="labelsModalOverlay">
+  <div class="modal wide">
+    <h2>Labels printen</h2>
+    <div class="modal-sub">Kies welke kaarten van <strong id="labelsOwnerName">Brian</strong> een label krijgen — barcode + naam + prijs.</div>
+    <input type="text" id="labelsSearchInput" placeholder="🔍 Zoek kaartnaam of barcode..." style="width:100%; margin-bottom:14px; background:var(--surface-raised); border:1px solid var(--line-strong); border-radius:var(--radius-sm); color:var(--text); padding:10px 12px; font-size:0.87rem; font-family:inherit;">
+    <div id="labelsPickerGrid" class="st-picker-grid"></div>
+    <div class="modal-actions">
+      <span style="margin-right:auto; color:var(--muted); font-size:0.84rem; align-self:center;"><span id="labelsSelectedCount">0</span> geselecteerd</span>
+      <button type="button" class="btn-ghost" id="closeLabelsBtn">Annuleren</button>
+      <button type="button" class="btn-primary" id="printLabelsBtn">Print labels</button>
+    </div>
+  </div>
+</div>
+
+<div id="printLabelsContainer"></div>
+
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script>
   const firebaseConfig = {
     apiKey: "AIzaSyCF39KNiJfhAgm2ZPxOsY-2Q3JAk3tzsao",
@@ -578,7 +666,10 @@
     btn.classList.add('active');
     document.getElementById('view-dashboard').classList.toggle('hidden', btn.dataset.page!=='dashboard');
     document.getElementById('view-inventaris').classList.toggle('hidden', btn.dataset.page!=='inventaris');
-    if(btn.dataset.page==='dashboard') renderDashboard(); else renderGrid();
+    document.getElementById('view-events').classList.toggle('hidden', btn.dataset.page!=='events');
+    if(btn.dataset.page==='dashboard') renderDashboard();
+    else if(btn.dataset.page==='events') renderEvents();
+    else if(btn.dataset.page==='inventaris') renderGrid();
   }));
 
   // ===== User select =====
@@ -1081,6 +1172,147 @@
   renderFilterChips();
   loadItems();
   loadTransactions();
+
+  // ===== Events (shared, not per-user) =====
+  let eventsData = [];
+  let editingEventId = null;
+
+  function setActiveSegSimple(containerId, attr, value){
+    document.querySelectorAll('#'+containerId+' .seg-btn').forEach(b => b.classList.toggle('active', b.dataset[attr]===value));
+  }
+  function eventCardHTML(ev, isPast){
+    const d = new Date(ev.date);
+    const day = d.getDate();
+    const month = d.toLocaleDateString('nl-BE', { month: 'short' }).toUpperCase();
+    const paidBadge = ev.paid ? '<span class="paid-badge paid">Betaald</span>' : '<span class="paid-badge unpaid">Niet betaald</span>';
+    return `<div class="event-card ${isPast?'past':''}" data-id="${ev.id}">
+      <div class="event-date-badge"><div class="event-day">${day}</div><div class="event-month">${month}</div></div>
+      <div class="event-main">
+        <div class="event-name">${ev.name}</div>
+        <div class="event-meta">${ev.tablePrice?('€'+ev.tablePrice+' tafel · '):''}${ev.dimensions?(ev.dimensions+' · '):''}${paidBadge}</div>
+        ${ev.notes ? `<div class="event-notes">${ev.notes}</div>` : ''}
+      </div>
+      <div class="event-actions">
+        <button type="button" class="ev-edit" data-id="${ev.id}" title="Bewerken">✎</button>
+        <button type="button" class="ev-delete" data-id="${ev.id}" title="Verwijderen">×</button>
+      </div>
+    </div>`;
+  }
+  function renderEvents(){
+    const today = new Date(); today.setHours(0,0,0,0);
+    const upcoming = eventsData.filter(e => new Date(e.date) >= today).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    const past = eventsData.filter(e => new Date(e.date) < today).sort((a,b)=>new Date(b.date)-new Date(a.date));
+    document.getElementById('upcomingEventsList').innerHTML = upcoming.length===0 ? '<div class="empty-state">Nog geen aankomende events.</div>' : upcoming.map(e=>eventCardHTML(e,false)).join('');
+    document.getElementById('pastEventsList').innerHTML = past.length===0 ? '<div class="empty-state">Nog geen verleden events.</div>' : past.map(e=>eventCardHTML(e,true)).join('');
+    document.querySelectorAll('.ev-edit').forEach(b => b.addEventListener('click', () => openEditEventModal(eventsData.find(e=>e.id===b.dataset.id))));
+    document.querySelectorAll('.ev-delete').forEach(b => b.addEventListener('click', () => {
+      if(confirm('Dit event verwijderen?')) db.ref('events/'+b.dataset.id).remove();
+    }));
+  }
+  function loadEvents(){
+    db.ref('events').on('value', snap => {
+      const val = snap.val();
+      eventsData = val ? Object.values(val) : [];
+      renderEvents();
+    }, err => console.error('Events laadfout:', err));
+  }
+  loadEvents();
+
+  function openAddEventModal(){
+    editingEventId = null;
+    document.getElementById('eventModalTitle').textContent = 'Event toevoegen';
+    document.getElementById('eventSubmitBtn').textContent = 'Toevoegen';
+    document.getElementById('eventForm').reset();
+    setActiveSegSimple('evPaidSeg','paid','no');
+    document.getElementById('eventModalOverlay').classList.remove('hidden');
+    document.getElementById('evName').focus();
+  }
+  function openEditEventModal(ev){
+    if(!ev) return;
+    editingEventId = ev.id;
+    document.getElementById('eventModalTitle').textContent = 'Event bewerken';
+    document.getElementById('eventSubmitBtn').textContent = 'Opslaan';
+    document.getElementById('evName').value = ev.name || '';
+    document.getElementById('evDate').value = ev.date || '';
+    document.getElementById('evPrice').value = ev.tablePrice != null ? ev.tablePrice : '';
+    document.getElementById('evDims').value = ev.dimensions || '';
+    document.getElementById('evNotes').value = ev.notes || '';
+    setActiveSegSimple('evPaidSeg','paid', ev.paid ? 'yes' : 'no');
+    document.getElementById('eventModalOverlay').classList.remove('hidden');
+  }
+  document.getElementById('openEventModalBtn').addEventListener('click', openAddEventModal);
+  document.getElementById('closeEventBtn').addEventListener('click', () => document.getElementById('eventModalOverlay').classList.add('hidden'));
+  document.querySelectorAll('#evPaidSeg .seg-btn').forEach(b => b.addEventListener('click', () => setActiveSegSimple('evPaidSeg','paid', b.dataset.paid)));
+
+  document.getElementById('eventForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const id = editingEventId || ('ev_' + Date.now());
+    const ev = {
+      id, name: document.getElementById('evName').value.trim() || 'Naamloos event',
+      date: document.getElementById('evDate').value,
+      tablePrice: document.getElementById('evPrice').value === '' ? null : parseFloat(document.getElementById('evPrice').value),
+      dimensions: document.getElementById('evDims').value.trim(),
+      paid: document.querySelector('#evPaidSeg .seg-btn.active').dataset.paid === 'yes',
+      notes: document.getElementById('evNotes').value.trim(),
+      addedBy: activeUserName()
+    };
+    db.ref('events/' + id).set(ev).catch(err => console.error('Event opslaan mislukt:', err));
+    editingEventId = null;
+    document.getElementById('eventModalOverlay').classList.add('hidden');
+  });
+
+  // ===== Labels printen =====
+  let labelCart = new Set();
+  function labelTileHTML(item){
+    const bgClass = 'cond-bg-' + condTier(item);
+    const letter = (item.name||'?').charAt(0).toUpperCase();
+    const imgTag = item.image ? `<img src="${item.image}" alt="${item.name}" loading="lazy" onerror="this.style.display='none'">` : '';
+    const isSel = labelCart.has(item.id);
+    return `<div class="st-tile ${isSel?'selected':''}" data-id="${item.id}">
+      <div class="card-art ${bgClass}">${imgTag}<div class="card-monogram" style="font-size:1.6rem;">${letter}</div><div class="card-art-shine"></div><span class="st-tile-check">✓</span></div>
+      <div class="st-tile-info"><div class="st-tile-name">${item.name}</div><div class="st-tile-price">€${item.sellingPrice}</div></div>
+    </div>`;
+  }
+  function renderLabelsGrid(){
+    const q = document.getElementById('labelsSearchInput').value.trim().toLowerCase();
+    const items = itemsData.filter(i => i.status==='voorraad' && i.owner===activeInitial && (!q || (i.name+' '+(i.barcode||i.id)).toLowerCase().includes(q)));
+    document.getElementById('labelsPickerGrid').innerHTML = items.length===0 ? '<div class="empty-state">Geen kaarten gevonden.</div>' : items.map(labelTileHTML).join('');
+    document.getElementById('labelsSelectedCount').textContent = labelCart.size;
+  }
+  document.getElementById('labelsSearchInput').addEventListener('input', renderLabelsGrid);
+  document.getElementById('labelsPickerGrid').addEventListener('click', (e) => {
+    const tile = e.target.closest('.st-tile');
+    if(!tile) return;
+    const id = tile.dataset.id;
+    if(labelCart.has(id)) labelCart.delete(id); else labelCart.add(id);
+    renderLabelsGrid();
+  });
+  document.getElementById('openLabelsBtn').addEventListener('click', () => {
+    labelCart = new Set();
+    document.getElementById('labelsOwnerName').textContent = activeUserName();
+    document.getElementById('labelsSearchInput').value = '';
+    renderLabelsGrid();
+    document.getElementById('labelsModalOverlay').classList.remove('hidden');
+  });
+  document.getElementById('closeLabelsBtn').addEventListener('click', () => document.getElementById('labelsModalOverlay').classList.add('hidden'));
+
+  document.getElementById('printLabelsBtn').addEventListener('click', () => {
+    if(labelCart.size === 0) return;
+    const items = itemsData.filter(i => labelCart.has(i.id));
+    const container = document.getElementById('printLabelsContainer');
+    container.innerHTML = items.map(it => `
+      <div class="print-label">
+        <svg id="bc-${it.id}"></svg>
+        <div class="label-name">${it.name}</div>
+        <div class="label-price">€${it.sellingPrice}</div>
+      </div>`).join('');
+    items.forEach(it => {
+      try{ JsBarcode('#bc-' + it.id, it.barcode || it.id, { format:'CODE128', width:1.4, height:32, displayValue:true, fontSize:10, margin:2 }); }
+      catch(err){ console.error('Barcode genereren mislukt:', err); }
+    });
+    document.getElementById('labelsModalOverlay').classList.add('hidden');
+    setTimeout(() => window.print(), 150);
+  });
 </script>
 </body>
 </html>
