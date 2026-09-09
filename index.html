@@ -516,8 +516,11 @@
     <div class="modal-actions">
       <span style="margin-right:auto; color:var(--muted); font-size:0.84rem; align-self:center;"><span id="labelsSelectedCount">0</span> geselecteerd</span>
       <button type="button" class="btn-ghost" id="closeLabelsBtn">Annuleren</button>
-      <button type="button" class="btn-primary" id="printLabelsBtn">Print labels</button>
+      <button type="button" class="btn-ghost" id="printLabelsBtn">Print via browser</button>
+      <button type="button" class="btn-ghost" id="niimbotConnectBtn">🔵 Verbind Niimbot</button>
+      <button type="button" class="btn-primary" id="printNiimbotBtn" disabled>Print via Niimbot</button>
     </div>
+    <div id="niimbotStatus" style="text-align:right; color:var(--muted); font-size:0.78rem; margin-top:8px;"></div>
   </div>
 </div>
 
@@ -526,6 +529,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://unpkg.com/@mmote/niimbluelib@0.0.1-alpha.38/dist/umd/niimbluelib.min.js"></script>
 <script>
   const firebaseConfig = {
     apiKey: "AIzaSyCF39KNiJfhAgm2ZPxOsY-2Q3JAk3tzsao",
@@ -1312,6 +1316,90 @@
     });
     document.getElementById('labelsModalOverlay').classList.add('hidden');
     setTimeout(() => window.print(), 150);
+  });
+
+  // ===== Niimbot B21 (rechtstreeks via Bluetooth) =====
+  let niimbotClient = null;
+  const niimbotStatusEl = () => document.getElementById('niimbotStatus');
+
+  document.getElementById('niimbotConnectBtn').addEventListener('click', async () => {
+    if(!navigator.bluetooth){
+      alert('Web Bluetooth wordt niet ondersteund in deze browser. Gebruik Chrome of Edge (niet Safari, niet iPhone).');
+      return;
+    }
+    const lib = window.niimbluelib;
+    if(!lib){ niimbotStatusEl().textContent = 'Niimbot-bibliotheek kon niet laden — check internetverbinding.'; return; }
+    try{
+      niimbotClient = new lib.NiimbotBluetoothClient();
+      niimbotStatusEl().textContent = 'Verbinden… (kies je printer in het venster)';
+      await niimbotClient.connect();
+      niimbotStatusEl().textContent = '✅ Verbonden met printer.';
+      document.getElementById('printNiimbotBtn').disabled = false;
+    } catch(err){
+      console.error('Niimbot connect fout:', err);
+      niimbotStatusEl().textContent = 'Verbinden mislukt: ' + (err.message || err);
+      niimbotClient = null;
+    }
+  });
+
+  async function niimbotPrintOne(item){
+    const lib = window.niimbluelib;
+    const meta = lib.getPrinterMetaByModel('B21');
+    if(!meta) throw new Error('Onbekend printermodel B21 in bibliotheek.');
+    const labelMm = 30;
+    const feed = Math.max(1, Math.round((labelMm / 25.4) * meta.dpi));
+    const head = meta.printheadPixels;
+    const canvas = document.createElement('canvas');
+    if(meta.printDirection === 'left'){ canvas.width = feed; canvas.height = head; }
+    else { canvas.width = head; canvas.height = feed; }
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const bcCanvas = document.createElement('canvas');
+    JsBarcode(bcCanvas, item.barcode || item.id, { format:'CODE128', displayValue:false, margin:0, height: Math.round(canvas.height*0.42), width:2 });
+    const bcW = Math.min(canvas.width*0.9, bcCanvas.width);
+    const scale = bcW / bcCanvas.width;
+    const bcH = bcCanvas.height * scale;
+    const bx = (canvas.width - bcW) / 2;
+    const by = canvas.height * 0.08;
+    ctx.drawImage(bcCanvas, bx, by, bcW, bcH);
+
+    ctx.fillStyle = '#000';
+    ctx.textAlign = 'center';
+    ctx.font = 'bold ' + Math.round(canvas.height*0.13) + 'px Arial';
+    ctx.fillText(String(item.name).slice(0, 22), canvas.width/2, by + bcH + canvas.height*0.15);
+    ctx.font = Math.round(canvas.height*0.11) + 'px Arial';
+    ctx.fillText('€' + item.sellingPrice, canvas.width/2, by + bcH + canvas.height*0.28);
+
+    const encoded = lib.ImageEncoder.encodeCanvas(canvas, meta.printDirection);
+    const printTaskName = niimbotClient.getPrintTaskType?.() ?? 'B21';
+    const printTask = niimbotClient.abstraction.newPrintTask(printTaskName, { totalPages:1, statusPollIntervalMs:100, statusTimeoutMs:8000 });
+    try{
+      await printTask.printInit();
+      await printTask.printPage(encoded, 1);
+      await printTask.waitForPageFinished();
+      await printTask.waitForFinished();
+    } finally {
+      await printTask.printEnd();
+    }
+  }
+
+  document.getElementById('printNiimbotBtn').addEventListener('click', async () => {
+    if(!niimbotClient){ alert('Verbind eerst met de printer.'); return; }
+    if(labelCart.size === 0) return;
+    const items = itemsData.filter(i => labelCart.has(i.id));
+    const btn = document.getElementById('printNiimbotBtn');
+    btn.disabled = true;
+    for(const item of items){
+      niimbotStatusEl().textContent = 'Printen: ' + item.name + '…';
+      try{ await niimbotPrintOne(item); }
+      catch(err){
+        console.error('Niimbot print fout:', err);
+        niimbotStatusEl().textContent = 'Fout bij ' + item.name + ': ' + (err.message || err);
+      }
+    }
+    niimbotStatusEl().textContent = 'Klaar.';
+    btn.disabled = false;
   });
 </script>
 </body>
