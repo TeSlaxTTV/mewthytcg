@@ -150,10 +150,10 @@
   @media print {
     body > *:not(#printLabelsContainer){ display:none !important; }
     #printLabelsContainer{ display:flex !important; flex-wrap:wrap; gap:3mm; padding:5mm; }
-    .print-label{ width:40mm; height:30mm; box-sizing:border-box; border:1px dashed #999; border-radius:1.5mm; padding:1.5mm; text-align:center; page-break-inside:avoid; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; }
+    .print-label{ width:40mm; height:20mm; box-sizing:border-box; border:1px dashed #999; border-radius:1mm; padding:1mm; text-align:center; page-break-inside:avoid; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; }
     .print-label svg{ max-width:100%; height:auto; }
-    .print-label .label-name{ font-weight:700; font-size:7pt; margin-top:0.8mm; font-family:Arial, sans-serif; line-height:1.1; }
-    .print-label .label-price{ font-size:6.5pt; font-family:Arial, sans-serif; }
+    .print-label .label-name{ font-weight:700; font-size:6.5pt; margin-top:0.5mm; font-family:Arial, sans-serif; line-height:1.05; }
+    .print-label .label-price{ font-size:10pt; font-weight:800; font-family:Arial, sans-serif; line-height:1.1; margin-top:0.3mm; }
   }
   .chip{ background:var(--surface); border:1px solid var(--line-strong); color:var(--muted); border-radius:20px; padding:7px 14px; font-size:0.8rem; font-weight:700; cursor:pointer; }
   .chip.active{ color:#fff; background:linear-gradient(135deg, var(--pink), var(--violet)); border-color:transparent; }
@@ -1404,7 +1404,7 @@
     const detectedModel = niimbotClient.getPrintTaskType?.() || 'B21';
     const meta = lib.getPrinterMetaByModel(detectedModel) || lib.getPrinterMetaByModel('B21');
     if(!meta) throw new Error('Onbekend printermodel B21 in bibliotheek.');
-    const labelMm = 30;
+    const labelMm = 20;
     const feed = Math.max(1, Math.round((labelMm / 25.4) * meta.dpi));
     const head = meta.printheadPixels;
     const canvas = document.createElement('canvas');
@@ -1424,10 +1424,10 @@
 
     ctx.fillStyle = '#000';
     ctx.textAlign = 'center';
-    ctx.font = 'bold ' + Math.round(canvas.height*0.13) + 'px Arial';
-    ctx.fillText(String(item.name).slice(0, 22), canvas.width/2, by + bcH + canvas.height*0.15);
     ctx.font = Math.round(canvas.height*0.11) + 'px Arial';
-    ctx.fillText('€' + item.sellingPrice, canvas.width/2, by + bcH + canvas.height*0.28);
+    ctx.fillText(String(item.name).slice(0, 22), canvas.width/2, by + bcH + canvas.height*0.15);
+    ctx.font = 'bold ' + Math.round(canvas.height*0.18) + 'px Arial';
+    ctx.fillText('€' + item.sellingPrice, canvas.width/2, by + bcH + canvas.height*0.34);
 
     const encoded = lib.ImageEncoder.encodeCanvas(canvas, meta.printDirection);
     const printTaskName = niimbotClient.getPrintTaskType?.() ?? 'B21';
