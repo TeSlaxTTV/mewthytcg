@@ -1344,7 +1344,8 @@
 
   async function niimbotPrintOne(item){
     const lib = window.niimbluelib;
-    const meta = lib.getPrinterMetaByModel('B21');
+    const detectedModel = niimbotClient.getPrintTaskType?.() || 'B21';
+    const meta = lib.getPrinterMetaByModel(detectedModel) || lib.getPrinterMetaByModel('B21');
     if(!meta) throw new Error('Onbekend printermodel B21 in bibliotheek.');
     const labelMm = 30;
     const feed = Math.max(1, Math.round((labelMm / 25.4) * meta.dpi));
