@@ -267,6 +267,7 @@
     <button class="nav-link active" data-page="dashboard">Dashboard</button>
     <button class="nav-link" data-page="events">Events</button>
     <button class="nav-add-circle" id="openAddBtn" title="Item toevoegen" aria-label="Item toevoegen">+</button>
+    <button class="nav-add-circle" id="openBulkBtn" title="Meerdere kaarten toevoegen" aria-label="Meerdere kaarten toevoegen" style="margin-left:6px;font-size:0.7em;">+N</button>
     <button class="nav-link" data-page="inventaris">Inventaris</button>
     <button class="nav-link" id="openSellTradeBtn">Verkopen</button>
   </div>
@@ -416,6 +417,31 @@
     <div id="csResults"><div class="lookup-status">Typ minstens 2 letters om te zoeken.</div></div>
     <div class="modal-actions">
       <button type="button" class="btn-ghost" id="csCloseBtn">Annuleren</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== BULK ADD MODAL ===== -->
+<div class="modal-overlay hidden" id="bulkModalOverlay">
+  <div class="modal wide" style="max-width:780px;">
+    <h2>Meerdere kaarten toevoegen</h2>
+    <div class="modal-sub">Zoek, vink kaarten aan, vul de Cardmarket-prijs in — de aankoopprijs wordt automatisch berekend op basis van je percentage. De verkoopprijs staat los daarvan.</div>
+    <div class="field-row">
+      <div class="field"><label>Naam</label><input type="text" id="bkName" placeholder="bv. Charizard"></div>
+      <div class="field"><label>Card number (optioneel)</label><input type="text" id="bkNumber" placeholder="bv. 199/197"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Standaard aankoop %</label><input type="number" id="bkDefaultPct" min="1" max="100" value="80"></div>
+      <div class="field"><label>Standaard verkoopmarge (€ boven CM)</label><input type="number" id="bkDefaultMarkup" min="0" step="0.5" value="3"></div>
+    </div>
+    <div id="bkResults"><div class="lookup-status">Typ minstens 2 letters om te zoeken.</div></div>
+    <div id="bkSelectedBox" class="hidden">
+      <h3 style="margin:12px 0 6px;">Geselecteerd (<span id="bkSelectedCount">0</span>) — totale aankoopkost: €<span id="bkTotalCost">0.00</span></h3>
+      <div id="bkSelectedList"></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="bkCloseBtn">Annuleren</button>
+      <button type="button" class="btn-primary" id="bkSubmitBtn" disabled>Voeg 0 kaarten toe</button>
     </div>
   </div>
 </div>
@@ -863,6 +889,218 @@
     } catch(err){ console.error(err); }
   }
 
+  // ===== Bulk add (meerdere kaarten in een keer) =====
+  let bkFound = [];
+  let bkSelected = {};
+  let bkSearchGen = 0;
+  let bkDebounce = null;
+
+  function bkUpdateRowPurchase(id){
+    const s = bkSelected[id];
+    if(!s) return;
+    const row = document.querySelector('.bk-row[data-id="' + id + '"]');
+    const purchase = (parseFloat(s.cmPrice) || 0) * (parseFloat(s.pct) || 0) / 100;
+    if(row){
+      const el = row.querySelector('.bk-purchase');
+      if(el) el.textContent = '€' + purchase.toFixed(2);
+    }
+    bkUpdateTotal();
+  }
+  function bkUpdateTotal(){
+    let total = 0;
+    Object.values(bkSelected).forEach(s => { total += (parseFloat(s.cmPrice) || 0) * (parseFloat(s.pct) || 0) / 100; });
+    const el = document.getElementById('bkTotalCost');
+    if(el) el.textContent = total.toFixed(2);
+  }
+
+  function bkRenderSelected(){
+    const box = document.getElementById('bkSelectedBox');
+    const list = document.getElementById('bkSelectedList');
+    const ids = Object.keys(bkSelected);
+    document.getElementById('bkSelectedCount').textContent = ids.length;
+    const submitBtn = document.getElementById('bkSubmitBtn');
+    submitBtn.textContent = 'Voeg ' + ids.length + ' kaart' + (ids.length === 1 ? '' : 'en') + ' toe';
+    submitBtn.disabled = ids.length === 0;
+    if(ids.length === 0){ box.classList.add('hidden'); list.innerHTML = ''; return; }
+    box.classList.remove('hidden');
+    list.innerHTML = ids.map(id => {
+      const s = bkSelected[id];
+      const purchase = (parseFloat(s.cmPrice) || 0) * (parseFloat(s.pct) || 0) / 100;
+      return `
+        <div class="cs-row bk-row" data-id="${id}">
+          <img class="cs-thumb" src="${s.image || ''}" alt="" onerror="this.style.visibility='hidden'">
+          <div class="cs-info">
+            <div class="cs-name">${s.c.name}</div>
+            <div class="cs-set">#${s.c.localId || ''} · ${s.c.id}</div>
+            <div class="seg" data-role="cond">
+              ${['NM','LP','MP','HP','DMG'].map(cd => `<button type="button" class="seg-btn${cd===s.condition?' active':''}" data-cond="${cd}">${cd}</button>`).join('')}
+            </div>
+          </div>
+          <div class="field"><label>CM-prijs €</label><input type="number" min="0" step="0.01" class="bk-cm" value="${s.cmPrice}"></div>
+          <div class="field"><label>Aankoop %</label><input type="number" min="1" max="100" class="bk-pct" value="${s.pct}"></div>
+          <div class="field"><label>Aankoopprijs</label><div class="bk-purchase">€${purchase.toFixed(2)}</div></div>
+          <div class="field"><label>Verkoopprijs €</label><input type="number" min="0" step="0.01" class="bk-sell" value="${s.sellPrice}"></div>
+          <button type="button" class="btn-ghost bk-remove" title="Verwijderen">×</button>
+        </div>`;
+    }).join('');
+    bkUpdateTotal();
+
+    list.querySelectorAll('.bk-row').forEach(row => {
+      const id = row.dataset.id;
+      row.querySelectorAll('[data-role="cond"] .seg-btn').forEach(b => b.addEventListener('click', () => {
+        bkSelected[id].condition = b.dataset.cond;
+        bkRenderSelected();
+      }));
+      row.querySelector('.bk-cm').addEventListener('input', (e) => {
+        bkSelected[id].cmPrice = e.target.value;
+        if(!bkSelected[id]._sellTouched){
+          const markup = parseFloat(document.getElementById('bkDefaultMarkup').value) || 0;
+          bkSelected[id].sellPrice = ((parseFloat(e.target.value) || 0) + markup).toFixed(2);
+          const sellInput = row.querySelector('.bk-sell');
+          if(sellInput) sellInput.value = bkSelected[id].sellPrice;
+        }
+        bkUpdateRowPurchase(id);
+      });
+      row.querySelector('.bk-pct').addEventListener('input', (e) => {
+        bkSelected[id].pct = e.target.value;
+        bkUpdateRowPurchase(id);
+      });
+      row.querySelector('.bk-sell').addEventListener('input', (e) => {
+        bkSelected[id]._sellTouched = true;
+        bkSelected[id].sellPrice = e.target.value;
+      });
+      row.querySelector('.bk-remove').addEventListener('click', () => {
+        delete bkSelected[id];
+        bkRenderSelected();
+        document.querySelectorAll('.bk-check[data-cardid="' + id + '"]').forEach(chk => { chk.checked = false; });
+      });
+    });
+  }
+
+  async function bkToggleCard(c, checked){
+    if(!checked){
+      delete bkSelected[c.id];
+      bkRenderSelected();
+      return;
+    }
+    const defaultPct = document.getElementById('bkDefaultPct').value || '80';
+    bkSelected[c.id] = {
+      c, condition: 'NM', cmPrice: '', pct: defaultPct, sellPrice: '',
+      image: c.image ? c.image + '/high.png' : (c._fallbackImage ? (c._fallbackImage.large || c._fallbackImage.small) : ''),
+      setName: ''
+    };
+    bkRenderSelected();
+    try{
+      const res = await fetch('https://api.tcgdex.net/v2/en/cards/' + c.id);
+      const full = res.ok ? await res.json() : null;
+      const entry = bkSelected[c.id];
+      if(!entry) return; // deselected again before fetch resolved
+      const imgBase = (full && full.image) || c.image;
+      if(imgBase){
+        entry.image = imgBase + '/high.png';
+      } else {
+        const fallback = c._fallbackImage || await fetchPokemonTcgIoImage(c.name, c.localId);
+        if(fallback) entry.image = fallback.large || fallback.small;
+      }
+      entry.setName = (full && full.set && full.set.name) || '';
+      bkRenderSelected();
+    } catch(err){ console.error(err); }
+  }
+
+  async function bkSearch(){
+    const name = document.getElementById('bkName').value.trim();
+    const number = document.getElementById('bkNumber').value.trim();
+    const box = document.getElementById('bkResults');
+    if(!name){ box.innerHTML = '<div class="lookup-status">Typ minstens 2 letters om te zoeken.</div>'; return; }
+    box.innerHTML = '<div class="lookup-status">Zoeken…</div>';
+    const gen = ++bkSearchGen;
+    let url = 'https://api.tcgdex.net/v2/en/cards?name=' + encodeURIComponent(name);
+    if(number) url += '&localId=' + encodeURIComponent(number);
+    try{
+      const res = await fetch(url);
+      if(!res.ok) throw new Error('fail');
+      const data = await res.json();
+      if(gen !== bkSearchGen) return;
+      bkFound = (data || []).slice(0, 40);
+      if(bkFound.length === 0){ box.innerHTML = '<div class="lookup-status">Geen resultaten — probeer een andere naam of pas het nummer aan.</div>'; return; }
+      box.innerHTML = bkFound.map((c,i) => `
+        <div class="cs-row bk-pick-row" data-idx="${i}">
+          <input type="checkbox" class="bk-check" data-cardid="${c.id}" data-idx="${i}" ${bkSelected[c.id] ? 'checked' : ''}>
+          <img class="cs-thumb" src="${c.image ? c.image+'/low.png' : ''}" alt="" onerror="this.style.visibility='hidden'">
+          <div class="cs-info"><div class="cs-name">${c.name}</div><div class="cs-set">#${c.localId||''} · ${c.id}</div></div>
+        </div>`).join('');
+      box.querySelectorAll('.bk-check').forEach(chk => {
+        chk.addEventListener('click', (e) => e.stopPropagation());
+        chk.addEventListener('change', () => bkToggleCard(bkFound[parseInt(chk.dataset.idx,10)], chk.checked));
+      });
+      box.querySelectorAll('.bk-pick-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const chk = row.querySelector('.bk-check');
+          chk.checked = !chk.checked;
+          bkToggleCard(bkFound[parseInt(row.dataset.idx,10)], chk.checked);
+        });
+      });
+      bkFound.forEach((c, i) => {
+        if(c.image) return;
+        fetchPokemonTcgIoImage(c.name, c.localId).then(fallback => {
+          if(gen !== bkSearchGen || !fallback) return;
+          c._fallbackImage = fallback;
+          const img = box.querySelector('.bk-pick-row[data-idx="' + i + '"] .cs-thumb');
+          if(img){ img.src = fallback.small || fallback.large; img.style.visibility = 'visible'; }
+        });
+      });
+    } catch(err){ console.error(err); box.innerHTML = '<div class="lookup-status">Opzoeken mislukt — probeer opnieuw.</div>'; }
+  }
+  document.getElementById('bkName').addEventListener('keydown', (e) => { if(e.key==='Enter'){ e.preventDefault(); bkSearch(); } });
+  document.getElementById('bkNumber').addEventListener('keydown', (e) => { if(e.key==='Enter'){ e.preventDefault(); bkSearch(); } });
+  document.getElementById('bkName').addEventListener('input', () => {
+    clearTimeout(bkDebounce);
+    bkDebounce = setTimeout(() => { if(document.getElementById('bkName').value.trim().length >= 2) bkSearch(); }, 300);
+  });
+  document.getElementById('bkNumber').addEventListener('input', () => {
+    clearTimeout(bkDebounce);
+    bkDebounce = setTimeout(() => { if(document.getElementById('bkName').value.trim()) bkSearch(); }, 300);
+  });
+
+  function openBulkModal(){
+    bkFound = [];
+    bkSelected = {};
+    bkSearchGen++;
+    document.getElementById('bkName').value = '';
+    document.getElementById('bkNumber').value = '';
+    document.getElementById('bkResults').innerHTML = '<div class="lookup-status">Typ minstens 2 letters om te zoeken.</div>';
+    bkRenderSelected();
+    document.getElementById('bulkModalOverlay').classList.remove('hidden');
+    document.getElementById('bkName').focus();
+  }
+  document.getElementById('openBulkBtn').addEventListener('click', openBulkModal);
+  document.getElementById('bkCloseBtn').addEventListener('click', () => document.getElementById('bulkModalOverlay').classList.add('hidden'));
+
+  document.getElementById('bkSubmitBtn').addEventListener('click', () => {
+    const ids = Object.keys(bkSelected);
+    if(ids.length === 0) return;
+    ids.forEach(id => {
+      const s = bkSelected[id];
+      const cmPrice = parseFloat(s.cmPrice) || 0;
+      const pct = parseFloat(s.pct) || 0;
+      const purchasePrice = Math.round(cmPrice * pct) / 100;
+      const sellingPrice = parseFloat(s.sellPrice) || 0;
+      const newId = genId();
+      const item = {
+        id: newId, barcode: newId,
+        name: s.c.name, cardNumber: s.c.localId || '', set: s.setName || '',
+        itemType: 'Raw', condition: s.condition, gradingCompany: null, grade: null,
+        sellingPrice: sellingPrice, purchasePrice: purchasePrice,
+        image: s.image || null,
+        tradeValue: null, acquisitionMethod: 'Cash',
+        acquisitionDetails: { type: 'bulkPurchase', marketPrice: cmPrice, percentage: pct },
+        owner: activeInitial, status: 'voorraad', createdAt: Date.now()
+      };
+      saveItem(item);
+    });
+    document.getElementById('bulkModalOverlay').classList.add('hidden');
+  });
+
   let editingItemId = null;
 
   function openAddModal(){
@@ -958,6 +1196,9 @@
       const d = item.acquisitionDetails;
       const marketLine = d.marketPriceAtTrade != null ? `Marktprijs op moment van ruil: €${d.marketPriceAtTrade} × ${d.percentage}% = €${d.tradeValue}<br>` : `Trade value van deze kaart: €${d.tradeValue}<br>`;
       acqBox.innerHTML = `<strong>Acquisition History (Trade)</strong><br>Ingeruild tegen: ${d.givenSummary || '—'}<br>${marketLine}${d.cashAdjust ? ('Cash-aanpassing: ' + (d.cashAdjust>0?'+':'') + '€'+d.cashAdjust.toFixed(2) + '<br>') : ''}→ Effectieve acquisition cost: <strong>${priceOrDash(item.purchasePrice).replace(/<[^>]+>/g,'')}</strong>`;
+    } else if(item.acquisitionDetails && item.acquisitionDetails.type === 'bulkPurchase'){
+      const d = item.acquisitionDetails;
+      acqBox.innerHTML = `<strong>Acquisition (bulk aankoop)</strong><br>Cardmarket-prijs: €${d.marketPrice} × ${d.percentage}% = €${item.purchasePrice}`;
     } else {
       acqBox.innerHTML = `<strong>Acquisition</strong><br>Methode: ${item.acquisitionMethod || 'Unknown'}`;
     }
