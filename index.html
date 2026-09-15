@@ -927,20 +927,24 @@
       const s = bkSelected[id];
       const purchase = (parseFloat(s.cmPrice) || 0) * (parseFloat(s.pct) || 0) / 100;
       return `
-        <div class="cs-row bk-row" data-id="${id}">
-          <img class="cs-thumb" src="${s.image || ''}" alt="" onerror="this.style.visibility='hidden'">
-          <div class="cs-info">
-            <div class="cs-name">${s.c.name}</div>
-            <div class="cs-set">#${s.c.localId || ''} · ${s.c.id}</div>
-            <div class="seg" data-role="cond">
-              ${['NM','LP','MP','HP','DMG'].map(cd => `<button type="button" class="seg-btn${cd===s.condition?' active':''}" data-cond="${cd}">${cd}</button>`).join('')}
+        <div class="bk-row" data-id="${id}" style="border:1px solid #e2d6f7;border-radius:10px;padding:10px 12px;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <img class="cs-thumb" src="${s.image || ''}" alt="" onerror="this.style.visibility='hidden'" style="width:44px;height:auto;flex:0 0 auto;">
+            <div style="flex:1;min-width:0;">
+              <div class="cs-name">${s.c.name}</div>
+              <div class="cs-set">#${s.c.localId || ''} · ${s.c.id}</div>
             </div>
+            <button type="button" class="btn-ghost bk-remove" title="Verwijderen" style="flex:0 0 auto;">×</button>
           </div>
-          <div class="field"><label>CM-prijs €</label><input type="number" min="0" step="0.01" class="bk-cm" value="${s.cmPrice}"></div>
-          <div class="field"><label>Aankoop %</label><input type="number" min="1" max="100" class="bk-pct" value="${s.pct}"></div>
-          <div class="field"><label>Aankoopprijs</label><div class="bk-purchase">€${purchase.toFixed(2)}</div></div>
-          <div class="field"><label>Verkoopprijs €</label><input type="number" min="0" step="0.01" class="bk-sell" value="${s.sellPrice}"></div>
-          <button type="button" class="btn-ghost bk-remove" title="Verwijderen">×</button>
+          <div class="seg" data-role="cond" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+            ${['NM','LP','MP','HP','DMG'].map(cd => `<button type="button" class="seg-btn${cd===s.condition?' active':''}" data-cond="${cd}" style="flex:0 0 auto;">${cd}</button>`).join('')}
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
+            <div class="field" style="width:100px;flex:0 0 auto;"><label>CM-prijs €</label><input type="number" min="0" step="0.01" class="bk-cm" value="${s.cmPrice}"></div>
+            <div class="field" style="width:80px;flex:0 0 auto;"><label>Aankoop %</label><input type="number" min="1" max="100" class="bk-pct" value="${s.pct}"></div>
+            <div class="field" style="width:100px;flex:0 0 auto;"><label>Aankoopprijs</label><div class="bk-purchase" style="padding:8px 0;font-weight:600;">€${purchase.toFixed(2)}</div></div>
+            <div class="field" style="width:110px;flex:0 0 auto;"><label>Verkoopprijs €</label><input type="number" min="0" step="0.01" class="bk-sell" value="${s.sellPrice}"></div>
+          </div>
         </div>`;
     }).join('');
     bkUpdateTotal();
