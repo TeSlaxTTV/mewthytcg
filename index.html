@@ -800,6 +800,19 @@
     csDebounce = setTimeout(() => { if(document.getElementById('csName').value.trim()) csSearch(); }, 300);
   });
 
+  async function fetchPokemonTcgIoImage(name, number){
+    try{
+      let q = 'name:"' + String(name || '').replace(/"/g, '') + '"';
+      if(number) q += ' number:' + number;
+      const url = 'https://api.pokemontcg.io/v2/cards?q=' + encodeURIComponent(q) + '&pageSize=1';
+      const res = await fetch(url);
+      if(!res.ok) return null;
+      const data = await res.json();
+      const card = data && data.data && data.data[0];
+      return (card && card.images) || null;
+    } catch(err){ console.error(err); return null; }
+  }
+
   async function csPickCard(c){
     document.getElementById('csModalOverlay').classList.add('hidden');
     if(csTargetRow){
@@ -810,7 +823,12 @@
         const res = await fetch('https://api.tcgdex.net/v2/en/cards/' + c.id);
         const full = res.ok ? await res.json() : null;
         const imgBase = (full && full.image) || c.image;
-        if(imgBase) targetRow.dataset.image = imgBase + '/high.png';
+        if(imgBase){
+          targetRow.dataset.image = imgBase + '/high.png';
+        } else {
+          const fallback = await fetchPokemonTcgIoImage(c.name, c.localId);
+          if(fallback) targetRow.dataset.image = fallback.large || fallback.small;
+        }
       } catch(err){ console.error(err); }
       return;
     }
@@ -821,7 +839,12 @@
       const full = res.ok ? await res.json() : null;
       document.getElementById('fSet').value = (full && full.set && full.set.name) || '';
       const imgBase = (full && full.image) || c.image;
-      if(imgBase) selectedImage = imgBase + '/high.png';
+      if(imgBase){
+        selectedImage = imgBase + '/high.png';
+      } else {
+        const fallback = await fetchPokemonTcgIoImage(c.name, c.localId);
+        if(fallback) selectedImage = fallback.large || fallback.small;
+      }
     } catch(err){ console.error(err); }
   }
 
