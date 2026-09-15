@@ -765,18 +765,21 @@
   document.getElementById('csCloseBtn').addEventListener('click', () => document.getElementById('csModalOverlay').classList.add('hidden'));
 
   let csDebounce = null;
+  let csSearchGen = 0;
   async function csSearch(){
     const name = document.getElementById('csName').value.trim();
     const number = document.getElementById('csNumber').value.trim();
     const box = document.getElementById('csResults');
     if(!name){ box.innerHTML = '<div class="lookup-status">Typ minstens 2 letters om te zoeken.</div>'; return; }
     box.innerHTML = '<div class="lookup-status">Zoeken…</div>';
+    const gen = ++csSearchGen;
     let url = 'https://api.tcgdex.net/v2/en/cards?name=' + encodeURIComponent(name);
     if(number) url += '&localId=' + encodeURIComponent(number);
     try{
       const res = await fetch(url);
       if(!res.ok) throw new Error('fail');
       const data = await res.json();
+      if(gen !== csSearchGen) return;
       csFound = (data || []).slice(0, 40);
       if(csFound.length===0){ box.innerHTML = '<div class="lookup-status">Geen resultaten — probeer een andere naam of pas het nummer aan.</div>'; return; }
       box.innerHTML = csFound.map((c,i) => `
@@ -786,6 +789,18 @@
         </div>`).join('');
       box.querySelectorAll('.cs-row').forEach(row => {
         row.addEventListener('click', () => csPickCard(csFound[parseInt(row.dataset.idx,10)]));
+      });
+      csFound.forEach((c, i) => {
+        if(c.image) return;
+        fetchPokemonTcgIoImage(c.name, c.localId).then(fallback => {
+          if(gen !== csSearchGen || !fallback) return;
+          c._fallbackImage = fallback;
+          const img = box.querySelector('.cs-row[data-idx="' + i + '"] .cs-thumb');
+          if(img){
+            img.src = fallback.small || fallback.large;
+            img.style.visibility = 'visible';
+          }
+        });
       });
     } catch(err){ console.error(err); box.innerHTML = '<div class="lookup-status">Opzoeken mislukt — probeer opnieuw.</div>'; }
   }
@@ -826,7 +841,7 @@
         if(imgBase){
           targetRow.dataset.image = imgBase + '/high.png';
         } else {
-          const fallback = await fetchPokemonTcgIoImage(c.name, c.localId);
+          const fallback = c._fallbackImage || await fetchPokemonTcgIoImage(c.name, c.localId);
           if(fallback) targetRow.dataset.image = fallback.large || fallback.small;
         }
       } catch(err){ console.error(err); }
@@ -842,7 +857,7 @@
       if(imgBase){
         selectedImage = imgBase + '/high.png';
       } else {
-        const fallback = await fetchPokemonTcgIoImage(c.name, c.localId);
+        const fallback = c._fallbackImage || await fetchPokemonTcgIoImage(c.name, c.localId);
         if(fallback) selectedImage = fallback.large || fallback.small;
       }
     } catch(err){ console.error(err); }
