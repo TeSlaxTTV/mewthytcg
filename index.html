@@ -268,6 +268,12 @@
   .pick-card.selected .pick-tick{ display:flex; }
   .pick-name{ font-weight:700; font-size:.84rem; line-height:1.2; margin-top:6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .pick-set{ color:var(--muted); font-size:.75rem; line-height:1.25; margin-top:2px; }
+  .picked-chip{ display:flex; align-items:center; gap:12px; background:#EFE6FF; border:1.5px solid var(--violet-deep); border-radius:12px; padding:8px 12px; margin-bottom:14px; }
+  .picked-chip.hidden{ display:none; }
+  .picked-chip img{ width:36px; height:50px; object-fit:cover; border-radius:5px; background:var(--surface-raised); flex-shrink:0; }
+  .picked-chip .pc-name{ font-weight:700; line-height:1.2; }
+  .picked-chip .pc-sub{ color:var(--muted); font-size:.85rem; }
+  #fResults{ margin-bottom:12px; }
   .seg{ display:flex; gap:8px; flex-wrap:wrap; }
   .seg-btn{
     flex:1; min-width:64px; min-height:48px; background:var(--surface); border:1.5px solid var(--line-strong); border-radius:var(--radius-sm);
@@ -507,6 +513,7 @@
     .modal.wide{ max-width:none; }
     .field-row{ grid-template-columns:1fr; gap:0; }
     #bulkModalOverlay .field-row, #csModalOverlay .field-row{ grid-template-columns:1.5fr 1fr; gap:10px; }
+    .field-row.search-row{ grid-template-columns:minmax(0,1.6fr) minmax(0,1fr); gap:10px; }
     #sellTradeModalOverlay .modal{ max-height:100vh; height:100vh; border-radius:0; }
     #sellTradeModalOverlay #stPickerGrid{ max-height:34vh; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); }
     .st-mode-toggle{ width:100%; }
@@ -621,15 +628,14 @@
     <form id="addForm">
       <div class="field">
         <label>Naam</label>
-        <div class="lookup-row">
-          <input type="text" id="fName" placeholder="bv. Charizard ex" required>
-          <button type="button" class="btn-lookup" id="lookupBtn">Zoek</button>
-        </div>
+        <input type="text" id="fName" placeholder="bv. Charizard ex" autocomplete="off" required>
       </div>
-      <div class="field-row">
-        <div class="field"><label>Kaartnummer</label><input type="text" id="fNumber" placeholder="12/21"></div>
-        <div class="field"><label>Set</label><input type="text" id="fSet" placeholder="Obsidian Flames"></div>
+      <div class="field-row search-row">
+        <div class="field"><label>Set</label><select id="fSetSel" class="set-select"><option value="">Alle sets</option></select><input type="hidden" id="fSet"></div>
+        <div class="field"><label>Kaartnr.</label><input type="text" id="fNumber" placeholder="bv. 199" autocomplete="off"></div>
       </div>
+      <div id="fResults" class="hidden"></div>
+      <div id="fPicked" class="picked-chip hidden"></div>
       <div class="field"><label>Barcode (optioneel)</label><input type="text" id="fBarcode" placeholder="wordt automatisch aangemaakt indien leeg"></div>
       <div class="field">
         <label>Type</label>
@@ -1119,7 +1125,6 @@
     document.getElementById('csName').focus();
     if(document.getElementById('csName').value.trim().length >= 2) csSearch();
   }
-  document.getElementById('lookupBtn').addEventListener('click', openCardSearchModal);
   document.getElementById('csCloseBtn').addEventListener('click', () => document.getElementById('csModalOverlay').classList.add('hidden'));
 
   // ===== Gedeelde kaartzoeker (één kaart + meerdere kaarten) =====
@@ -1135,6 +1140,7 @@
       sel.innerHTML = '<option value="">Alle sets</option>' + tcgSets.map(z => '<option value="' + escHtml(z.id) + '">' + escHtml(z.name) + '</option>').join('');
       sel.value = cur; sel.disabled = false;
     });
+    syncAddSetSelect();
   }
   function tcgEnsureSets(){
     if(tcgSetsPromise) return tcgSetsPromise;
@@ -1293,7 +1299,9 @@
     try{
       const res = await fetch('https://api.tcgdex.net/v2/en/cards/' + c.id);
       const full = res.ok ? await res.json() : null;
-      document.getElementById('fSet').value = (full && full.set && full.set.name) || '';
+      const knownSet = tcgCardSetName(c);
+      document.getElementById('fSet').value = (full && full.set && full.set.name) || (Object.values(tcgSetNameById).indexOf(knownSet) >= 0 ? knownSet : '');
+      syncAddSetSelect();
       const imgBase = (full && full.image) || c.image;
       if(imgBase){
         selectedImage = imgBase + '/high.png';
@@ -1303,6 +1311,61 @@
       }
     } catch(err){ console.error(err); }
   }
+
+  // ===== Inline zoeken in het formulier "Item toevoegen" =====
+  let fDebounce = null, fSearchGen = 0;
+  function syncAddSetSelect(){
+    const sel = document.getElementById('fSetSel'); if(!sel) return;
+    const name = document.getElementById('fSet').value.trim();
+    sel.querySelectorAll('option[value^="custom:"]').forEach(o => o.remove());
+    if(!name){ sel.value = ''; return; }
+    const hit = Array.from(sel.options).find(o => o.value && o.textContent.trim().toLowerCase() === name.toLowerCase());
+    if(hit){ sel.value = hit.value; return; }
+    const o = document.createElement('option'); o.value = 'custom:' + name; o.textContent = name; sel.appendChild(o); sel.value = o.value;
+  }
+  function fSelectedSetId(){ const v = document.getElementById('fSetSel').value; return v.indexOf('custom:') === 0 ? '' : v; }
+  function fHideResults(){
+    const box = document.getElementById('fResults'); box.classList.add('hidden'); box.innerHTML = ''; fSearchGen++;
+  }
+  function fHidePicked(){ document.getElementById('fPicked').classList.add('hidden'); }
+  async function addSearch(){
+    const typeBtn = document.querySelector('#typeSeg .seg-btn.active');
+    const type = typeBtn ? typeBtn.dataset.type : 'Raw';
+    const name = document.getElementById('fName').value.trim();
+    const number = document.getElementById('fNumber').value.trim();
+    const setId = fSelectedSetId();
+    const box = document.getElementById('fResults');
+    if((type !== 'Raw' && type !== 'Slab') || (!setId && name.length < 2)){ fHideResults(); return; }
+    fHidePicked();
+    box.classList.remove('hidden');
+    box.innerHTML = '<div class="lookup-status">Zoeken…</div>';
+    const gen = ++fSearchGen;
+    try{
+      const list = await tcgQuery(name, number, setId);
+      await tcgEnsureSets();
+      if(gen !== fSearchGen) return;
+      tcgRenderGrid(box, list, { setId, alive: () => gen === fSearchGen, onPick: c => addPickCard(c) });
+    } catch(err){ console.error(err); if(gen === fSearchGen) box.innerHTML = '<div class="lookup-status">Opzoeken mislukt — probeer opnieuw.</div>'; }
+  }
+  function addPickCard(c){
+    csTargetRow = null;
+    csPickCard(c);
+    fHideResults();
+    const chip = document.getElementById('fPicked');
+    const img = c.image ? '<img src="' + escHtml(c.image) + '/low.png" alt="" onerror="this.style.visibility=\'hidden\'">' : '';
+    chip.innerHTML = img + '<div><div class="pc-name">' + escHtml(c.name) + '</div><div class="pc-sub">' + escHtml(tcgCardSetName(c)) + ' · ' + escHtml(c.localId) + ' — gekozen</div></div>';
+    chip.classList.remove('hidden');
+  }
+  function addSearchDebounced(){ clearTimeout(fDebounce); fDebounce = setTimeout(addSearch, 300); }
+  document.getElementById('fName').addEventListener('input', addSearchDebounced);
+  document.getElementById('fNumber').addEventListener('input', addSearchDebounced);
+  document.getElementById('fSetSel').addEventListener('change', () => {
+    const sel = document.getElementById('fSetSel');
+    document.getElementById('fSet').value = sel.value ? sel.options[sel.selectedIndex].textContent : '';
+    addSearch();
+  });
+  document.querySelectorAll('#typeSeg .seg-btn').forEach(b => b.addEventListener('click', () => { if(b.dataset.type === 'Raw' || b.dataset.type === 'Slab') addSearchDebounced(); else fHideResults(); }));
+
 
   // ===== Bulk add (meerdere kaarten in een keer) =====
   let bkFound = [];
@@ -1511,6 +1574,7 @@
     document.getElementById('addForm').reset();
     document.getElementById('addOwnerName').textContent = activeUserName();
     selectedImage = null;
+    document.getElementById('fSetSel').value = ''; syncAddSetSelect(); fHideResults(); fHidePicked(); tcgEnsureSets();
     setActiveSeg('typeSeg','Raw'); toggleCondFields('Raw');
     setActiveSeg('condRawSeg','NM'); setActiveSeg('acqSeg','Cash');
     document.getElementById('addModalOverlay').classList.remove('hidden');
@@ -1529,6 +1593,7 @@
     document.getElementById('fName').value = item.name || '';
     document.getElementById('fNumber').value = item.cardNumber || '';
     document.getElementById('fSet').value = item.set || '';
+    syncAddSetSelect(); fHideResults(); fHidePicked(); tcgEnsureSets();
     document.getElementById('fBarcode').value = item.barcode || '';
     const type = item.itemType || 'Raw';
     setActiveSeg('typeSeg', type); toggleCondFields(type);
