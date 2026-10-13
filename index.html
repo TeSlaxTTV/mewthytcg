@@ -1148,14 +1148,15 @@
     syncAddSetSelect();
   }
   const tcgDigitalIds = {};
-  const isDigitalSetMeta = z => /^(A|B)\d+[a-z]?$/.test(z.id) || /^P-[AB]$/.test(z.id) || /pocket|\bTCGO\b|online|digital/i.test(z.name || '');
-  const isDigitalSerie = x => x.id === 'tcgp' || /pocket|online|live|digital|\bgame\b/i.test(x.name || '');
+  // Uitgesloten: digitale sets (Pocket e.d.) en producten die geen booster-set zijn (trainer kits, jumbo cards)
+  const isDigitalSetMeta = z => /^(A|B)\d+[a-z]?$/.test(z.id) || /^P-[AB]$/.test(z.id) || /pocket|\bTCGO\b|online|digital|trainer\s*kit|jumbo/i.test(z.name || '');
+  const isDigitalSerie = x => x.id === 'tcgp' || x.id === 'tk' || /pocket|online|live|digital|\bgame\b|trainer\s*kit/i.test(x.name || '');
   function tcgEnsureSets(){
     if(tcgSetsPromise) return tcgSetsPromise;
     document.querySelectorAll('select.set-select').forEach(sel => { sel.disabled = true; sel.options[0].textContent = 'Sets laden…'; });
     tcgSetsPromise = (async () => {
       let flat = null, digital = [];
-      try{ const c = JSON.parse(localStorage.getItem('mewthy_sets_v5') || 'null'); if(c && Date.now() - c.t < 7*86400000 && c.s && c.s.length){ flat = c.s; digital = c.d || []; } }catch(e){}
+      try{ const c = JSON.parse(localStorage.getItem('mewthy_sets_v6') || 'null'); if(c && Date.now() - c.t < 7*86400000 && c.s && c.s.length){ flat = c.s; digital = c.d || []; } }catch(e){}
       if(!flat){
         const sr = await fetch('https://api.tcgdex.net/v2/en/series');
         if(!sr.ok) throw new Error('series');
@@ -1192,7 +1193,7 @@
             if(sorted.length) flat = sorted;
           }
         }catch(e){ console.error(e); }
-        try{ localStorage.setItem('mewthy_sets_v5', JSON.stringify({ t: Date.now(), s: flat, d: digital })); }catch(e){}
+        try{ localStorage.setItem('mewthy_sets_v6', JSON.stringify({ t: Date.now(), s: flat, d: digital })); }catch(e){}
       }
       tcgSets = flat;
       flat.forEach(z => { tcgSetNameById[z.id] = z.name; });
