@@ -264,6 +264,7 @@
     border-radius:0 0 22px 22px;
   }
   .modal-actions .btn-primary{ min-height:52px; padding:0 26px; font-size:1.05rem; }
+  .btn-amount{ margin-left:6px; padding-left:14px; border-left:1px solid rgba(255,255,255,0.45); font-weight:800; font-size:1.1rem; }
 
   .lookup-row{ display:flex; gap:10px; }
   .lookup-row input{ flex:1; }
@@ -384,8 +385,8 @@
   /* ===== Phone & small tablet ===== */
   @media (max-width:899px){
     body{ padding-bottom:calc(92px + env(safe-area-inset-bottom)); }
-    .navbar-inner{ padding:8px 16px; min-height:60px; gap:12px; }
     .navbar{ background:#fff; backdrop-filter:none; -webkit-backdrop-filter:none; }
+    .navbar-inner{ padding:8px 16px; min-height:60px; gap:12px; }
     .nav-left img{ height:32px; }
     .user-select{ margin-left:auto; }
     .nav-center{
@@ -413,7 +414,7 @@
     .top5-grid{ grid-template-columns:repeat(2, 1fr); }
     .card-grid{ grid-template-columns:repeat(2, 1fr); gap:12px; }
     .history-row{ padding:13px 14px; gap:12px; }
-    .type-badge{ min-width:0; }
+    .type-badge{ min-width:72px; }
     .field-row-3{ grid-template-columns:1fr 1fr; }
   }
   @media (max-width:700px){
@@ -422,6 +423,7 @@
     .modal-actions{ border-radius:0; }
     .modal.wide{ max-width:none; }
     .field-row{ grid-template-columns:1fr; gap:0; }
+    #bulkModalOverlay .field-row, #csModalOverlay .field-row{ grid-template-columns:1.5fr 1fr; gap:10px; }
     #sellTradeModalOverlay .modal{ max-height:100vh; height:100vh; border-radius:0; }
     #sellTradeModalOverlay #stPickerGrid{ max-height:34vh; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); }
     .st-mode-toggle{ width:100%; }
@@ -467,7 +469,8 @@
       <button data-name="Jordan" data-initial="J">Jordan</button>
     </div>
   </div>
-</div>
+  </div>
+</header>
 
 <div class="main">
 
@@ -477,7 +480,7 @@
 
     <div class="stat-row">
       <div class="stat-card"><div class="stat-label">Kaarten</div><div class="stat-value" id="statTotalCards">0</div></div>
-      <div class="stat-card"><div class="stat-label">Voorraadwaarde</div><div class="stat-value" id="statTotalValue">€0</div></div>
+      <div class="stat-card"><div class="stat-label">Voorraadwaarde</div><div class="stat-value" id="statTotalValue">€0,00</div></div>
       <div class="stat-card"><div class="stat-label">Klanten</div><div class="stat-value" id="statCustomers">0</div></div>
     </div>
 
@@ -498,7 +501,7 @@
 
     <div class="stat-row" style="grid-template-columns:repeat(2,1fr); max-width:480px;">
       <div class="stat-card"><div class="stat-label">Kaarten</div><div class="stat-value" id="invTotalCards">0</div></div>
-      <div class="stat-card"><div class="stat-label">Voorraadwaarde</div><div class="stat-value" id="invTotalValue">€0</div></div>
+      <div class="stat-card"><div class="stat-label">Voorraadwaarde</div><div class="stat-value" id="invTotalValue">€0,00</div></div>
     </div>
 
     <div class="toolbar">
@@ -613,7 +616,7 @@
 <div class="modal-overlay hidden" id="bulkModalOverlay">
   <div class="modal wide">
     <h2>Meerdere kaarten toevoegen</h2>
-    <div class="modal-sub">Zoek, vink kaarten aan, vul de Cardmarket-prijs en het aantal in — de te betalen prijs wordt berekend op basis van je percentage. Vul je geen verkoopprijs in, dan wordt de CM-prijs gebruikt.</div>
+    <div class="modal-sub">Vink kaarten aan en vul de Cardmarket-prijs in. Je ziet meteen wat je moet betalen. Zonder verkoopprijs wordt de CM-prijs gebruikt.</div>
     <div class="field-row">
       <div class="field"><label>Naam</label><input type="text" id="bkName" placeholder="bv. Charizard"></div>
       <div class="field"><label>Kaartnummer (optioneel)</label><input type="text" id="bkNumber" placeholder="bv. 199/197"></div>
@@ -641,7 +644,7 @@
     <h2 id="detailName">—</h2>
     <div class="modal-sub" id="detailSub">—</div>
     <div class="detail-fields">
-      <div><div class="detail-field-label">Verkoopprijs</div><div class="detail-field-value" id="detailSelling">€0</div></div>
+      <div><div class="detail-field-label">Verkoopprijs</div><div class="detail-field-value" id="detailSelling">€0,00</div></div>
       <div><div class="detail-field-label">Aankoopprijs</div><div class="detail-field-value" id="detailPurchase">—</div></div>
       <div><div class="detail-field-label">Conditie</div><div class="detail-field-value" id="detailCond">—</div></div>
       <div><div class="detail-field-label">Barcode</div><div class="detail-field-value mono" id="detailBarcode">—</div></div>
@@ -683,7 +686,7 @@
         <button type="button" class="seg-btn active" data-method="Cash">Cash</button>
         <button type="button" class="seg-btn" data-method="Payconiq">Payconiq</button>
       </div>
-      <div class="sale-total-row"><span>Totaal</span><span class="mono" id="stCashTotal">€0</span></div>
+      <div class="sale-total-row"><span>Totaal</span><span class="mono" id="stCashTotal">€0,00</span></div>
     </div>
 
     <div id="stTradePane" class="hidden">
@@ -705,7 +708,7 @@
         <button type="button" class="seg-btn active" data-method="Cash">Cash</button>
         <button type="button" class="seg-btn" data-method="Payconiq">Payconiq</button>
       </div>
-      <div class="sale-total-row"><span>Totaal</span><span class="mono" id="stBulkTotal">€0</span></div>
+      <div class="sale-total-row"><span>Totaal</span><span class="mono" id="stBulkTotal">€0,00</span></div>
     </div>
 
     <div class="modal-actions">
@@ -824,7 +827,8 @@
     if(item.itemType === 'Slab') return (item.gradingCompany||'') + ' ' + (item.grade||'');
     return item.condition || item.itemType;
   }
-  function priceOrDash(v){ return (v===null||v===undefined||v==='') ? '<span class="price-empty">—</span>' : '€'+v; }
+  function eur(v){ const n = parseFloat(v); return isNaN(n) ? '—' : '€' + n.toFixed(2).replace('.', ','); }
+  function priceOrDash(v){ return (v===null||v===undefined||v==='') ? '<span class="price-empty">—</span>' : eur(v); }
 
   function tileHTML(item){
     const bgClass = 'cond-bg-' + condTier(item);
@@ -843,8 +847,8 @@
         <div class="card-title">${item.name}</div>
         <div class="card-subtitle">${item.set || ''}</div>
         <div class="card-prices">
-          <div><span class="price-label">Selling</span><span class="price-mono">€${item.sellingPrice}</span></div>
-          <div><span class="price-label">Purchase</span><span class="price-mono">${priceOrDash(item.purchasePrice)}</span></div>
+          <div><span class="price-label">Verkoop</span><span class="price-mono">${eur(item.sellingPrice)}</span></div>
+          <div><span class="price-label">Inkoop</span><span class="price-mono">${priceOrDash(item.purchasePrice)}</span></div>
         </div>
       </div>
     </div>`;
@@ -868,7 +872,7 @@
     const grid = document.getElementById('invGrid');
     grid.innerHTML = filtered.length===0 ? '<div class="empty-state">Geen items gevonden.</div>' : filtered.map(tileHTML).join('');
     document.getElementById('invTotalCards').textContent = filtered.length;
-    document.getElementById('invTotalValue').textContent = '€' + filtered.reduce((s,i)=>s+(parseFloat(i.sellingPrice)||0),0).toFixed(2);
+    document.getElementById('invTotalValue').textContent = eur(filtered.reduce((s,i)=>s+(parseFloat(i.sellingPrice)||0),0));
   }
   searchInput.addEventListener('input', renderGrid);
 
@@ -892,20 +896,20 @@
     document.getElementById('dashOwnerName').textContent = activeUserName();
     const allStock = itemsData.filter(i => i.status === 'voorraad' && i.owner === activeInitial);
     document.getElementById('statTotalCards').textContent = allStock.length;
-    document.getElementById('statTotalValue').textContent = '€' + allStock.reduce((s,i)=>s+(parseFloat(i.sellingPrice)||0),0).toFixed(2);
+    document.getElementById('statTotalValue').textContent = eur(allStock.reduce((s,i)=>s+(parseFloat(i.sellingPrice)||0),0));
     const userTx = transactionsData.filter(tx => tx.user === activeUserName());
     document.getElementById('statCustomers').textContent = userTx.length;
 
     const hist = [...userTx].sort((a,b)=>b.timestamp-a.timestamp).slice(0,10);
     document.getElementById('historyPanel').innerHTML = hist.length===0 ? '<div class="empty-state">Nog geen transacties.</div>' : hist.map(tx => {
-      const label = tx.type==='sale'?'Sale':tx.type==='trade'?'Trade':'Purchase';
+      const label = tx.type==='sale'?'Verkoop':tx.type==='trade'?'Trade':'Aankoop';
       const names = (tx.items||[]).map(i=>i.name).join(', ') || '—';
       const incomingLine = (tx.incomingItems && tx.incomingItems.length)
-        ? `<div class="history-meta">Terug: ${tx.incomingItems.map(i => `${i.name} (markt €${i.marketPrice} × ${i.percentage}% = €${i.tradeValue})`).join(', ')}</div>`
+        ? `<div class="history-meta">Terug: ${tx.incomingItems.map(i => `${i.name} (markt ${eur(i.marketPrice)} × ${i.percentage}% = ${eur(i.tradeValue)})`).join(', ')}</div>`
         : '';
       return `<div class="history-row"><span class="type-badge ${tx.type}">${label}</span>
         <div class="history-main"><div class="history-items">${names}</div><div class="history-meta">${tx.user||''} · ${formatRelativeDate(tx.timestamp)}</div>${incomingLine}</div>
-        <div class="history-amount">€${(tx.totalSaleValue||0).toFixed(2)}</div></div>`;
+        <div class="history-amount">${eur(tx.totalSaleValue||0)}</div></div>`;
     }).join('');
 
     const top5 = [...allStock].sort((a,b)=>(parseFloat(b.sellingPrice)||0)-(parseFloat(a.sellingPrice)||0)).slice(0,5);
@@ -914,7 +918,7 @@
       const letter = (item.name||'?').charAt(0).toUpperCase();
       const imgTag = item.image ? `<img src="${item.image}" alt="${item.name}" loading="lazy" onerror="this.style.display='none'">` : '';
       return `<div class="card-tile top5-tile"><div class="card-art ${bgClass}">${imgTag}<div class="card-monogram">${letter}</div><div class="card-art-shine"></div><span class="rank-badge">${idx+1}</span></div>
-        <div class="card-info"><div class="card-title">${item.name}</div><div class="price-mono" style="margin-top:4px;">€${item.sellingPrice}</div></div></div>`;
+        <div class="card-info"><div class="card-title">${item.name}</div><div class="price-mono" style="margin-top:4px;">${eur(item.sellingPrice)}</div></div></div>`;
     }).join('');
   }
 
@@ -935,10 +939,6 @@
   const userSelectMenu = document.getElementById('userSelectMenu');
   userSelectBtn.addEventListener('click', () => userSelectMenu.classList.toggle('hidden'));
   document.addEventListener('click', (e) => { if(!document.getElementById('userSelect').contains(e.target)) userSelectMenu.classList.add('hidden'); });
-  userSelectMenu.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-    userSelectMenu.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
-    b.classList.add('active');
-    activeInitial = b.dataset.initial;
   // ===== Toevoegen-menu =====
   (function(){
     const wrap = document.getElementById('addMenuWrap');
@@ -951,6 +951,10 @@
     document.addEventListener('keydown', (e) => { if(e.key === 'Escape') setOpen(false); });
   })();
 
+  userSelectMenu.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    userSelectMenu.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    activeInitial = b.dataset.initial;
     document.getElementById('activeUserName').textContent = b.dataset.name;
     document.getElementById('invOwnerName').textContent = b.dataset.name;
     userSelectMenu.classList.add('hidden');
@@ -1104,7 +1108,7 @@
     let total = 0;
     Object.values(bkSelected).forEach(s => { total += bkLinePurchase(s); });
     const el = document.getElementById('bkTotalCost');
-    if(el) el.textContent = total.toFixed(2);
+    if(el) el.textContent = total.toFixed(2).replace('.', ',');
   }
   function bkUpdateSubmitLabel(){
     const ids = Object.keys(bkSelected);
@@ -1119,7 +1123,7 @@
     const row = document.querySelector('.bk-item[data-id="' + id + '"]');
     if(row){
       const el = row.querySelector('.bk-purchase');
-      if(el) el.textContent = '€' + bkLinePurchase(s).toFixed(2);
+      if(el) el.textContent = eur(bkLinePurchase(s));
     }
     bkUpdateTotal();
     bkUpdateSubmitLabel();
@@ -1158,7 +1162,7 @@
               </select>
             </div>
             <div class="field"><label>Verkoopprijs (€)</label><input type="number" inputmode="decimal" min="0" step="0.01" class="bk-sell" value="${s.sellPrice}" placeholder="= CM"></div>
-            <div class="field"><label>Te betalen</label><div class="bk-purchase">€${bkLinePurchase(s).toFixed(2)}</div></div>
+            <div class="field"><label>Te betalen</label><div class="bk-purchase">${eur(bkLinePurchase(s))}</div></div>
           </div>
         </div>`;
     }).join('');
@@ -1396,7 +1400,7 @@
     currentDetailItem = item;
     document.getElementById('detailName').textContent = item.name;
     document.getElementById('detailSub').textContent = [item.set, item.cardNumber].filter(Boolean).join(' · ') || item.itemType;
-    document.getElementById('detailSelling').textContent = '€' + item.sellingPrice;
+    document.getElementById('detailSelling').textContent = eur(item.sellingPrice);
     document.getElementById('detailPurchase').innerHTML = priceOrDash(item.purchasePrice);
     document.getElementById('detailCond').textContent = condLabel(item);
     document.getElementById('detailBarcode').textContent = item.barcode || item.id;
@@ -1431,6 +1435,15 @@
     document.querySelectorAll('#'+containerId+' .seg-btn').forEach(b => b.classList.toggle('active', b.dataset[attr]===value));
   }
 
+  function syncConfirmAmounts(){
+    const isZero = s => !s || /^€0,00$/.test(s.trim());
+    const cash = document.getElementById('stCashTotal').textContent;
+    const bulk = document.getElementById('stBulkTotal').textContent;
+    document.getElementById('confirmStCashBtn').innerHTML = 'Verkoop afronden' + (isZero(cash) ? '' : '<span class="btn-amount">' + cash + '</span>');
+    document.getElementById('confirmStBulkBtn').innerHTML = 'Bulkverkoop afronden' + (isZero(bulk) ? '' : '<span class="btn-amount">' + bulk + '</span>');
+  }
+  ['stCashTotal','stBulkTotal'].forEach(id => new MutationObserver(syncConfirmAmounts).observe(document.getElementById(id), {childList:true, characterData:true, subtree:true}));
+
   function openSellTradeModal(){
     stCart = []; stMode = 'cash'; stPayMethod = 'Cash'; stBulkPayMethod = 'Cash';
     document.getElementById('stOwnerName').textContent = activeUserName();
@@ -1450,6 +1463,7 @@
     updateStBulkTotal();
     renderStPicker();
     renderStCart();
+    syncConfirmAmounts();
     document.getElementById('sellTradeModalOverlay').classList.remove('hidden');
     document.getElementById('stSearchInput').focus();
   }
@@ -1497,7 +1511,7 @@
   function updateStBulkTotal(){
     const rows = [...document.querySelectorAll('#stBulkRows .bulk-row')];
     const total = rows.reduce((s,row) => s + (parseFloat(row.querySelector('.br-price').value)||0), 0);
-    document.getElementById('stBulkTotal').textContent = '€' + total.toFixed(2);
+    document.getElementById('stBulkTotal').textContent = eur(total);
   }
   document.getElementById('stBulkRows').addEventListener('input', updateStBulkTotal);
 
@@ -1525,7 +1539,7 @@
     const isSelected = stCart.some(c=>c.id===item.id);
     return `<div class="st-tile ${isSelected?'selected':''}" data-id="${item.id}">
       <div class="card-art ${bgClass}">${imgTag}<div class="card-monogram" style="font-size:1.6rem;">${letter}</div><div class="card-art-shine"></div><span class="st-tile-check">✓</span></div>
-      <div class="st-tile-info"><div class="st-tile-name">${item.name}</div><div class="st-tile-price">€${item.sellingPrice}</div></div>
+      <div class="st-tile-info"><div class="st-tile-name">${item.name}</div><div class="st-tile-price">${eur(item.sellingPrice)}</div></div>
     </div>`;
   }
   function renderStPicker(){
@@ -1565,7 +1579,7 @@
     document.getElementById('stCartCount').textContent = stCart.length;
     if(stCart.length===0){ list.innerHTML = '<div class="empty-state" style="padding:20px;">Nog niets geselecteerd.</div>'; updateStCashTotal(); return; }
     list.innerHTML = stCart.map(it => `<div class="sale-item-row" data-id="${it.id}">
-      <div class="sale-item-name">${it.name}<div class="sale-item-cost">${it.purchasePrice!=null?'Cost €'+it.purchasePrice:'Cost —'}</div></div>
+      <div class="sale-item-name">${it.name}<div class="sale-item-cost">${it.purchasePrice!=null?'Inkoop '+eur(it.purchasePrice):'Inkoop —'}</div></div>
       <input type="number" class="sale-item-price mono" value="${it.sellingPrice}" step="0.5" min="0">
       <span class="sale-item-profit" data-cost="${it.purchasePrice!=null?it.purchasePrice:''}"></span>
       <button type="button" class="sale-remove" title="Verwijderen">×</button></div>`).join('');
@@ -1586,9 +1600,9 @@
       const cost = profitEl.dataset.cost;
       total += price;
       if(cost===''||cost===undefined){ profitEl.textContent='Profit —'; profitEl.classList.remove('pos'); }
-      else { const profit = price-parseFloat(cost); profitEl.textContent=(profit>=0?'+':'')+'€'+profit.toFixed(2); profitEl.classList.toggle('pos', profit>=0); }
+      else { const profit = price-parseFloat(cost); profitEl.textContent=(profit>=0?'+':'-')+eur(Math.abs(profit)); profitEl.classList.toggle('pos', profit>=0); }
     });
-    document.getElementById('stCashTotal').textContent = '€'+total.toFixed(2);
+    document.getElementById('stCashTotal').textContent = eur(total);
   }
 
   document.getElementById('confirmStCashBtn').addEventListener('click', () => {
@@ -1645,7 +1659,7 @@
         <span style="color:var(--muted); font-size:0.78rem; flex-shrink:0;">×</span>
         <input type="number" class="ti-pct" value="80" min="0" max="100" style="flex:0 0 56px;">
         <span style="color:var(--muted); font-size:0.78rem; flex-shrink:0;">% =</span>
-        <span class="ti-computed mono" style="font-weight:700; flex-shrink:0; min-width:56px;">€0</span>
+        <span class="ti-computed mono" style="font-weight:700; flex-shrink:0; min-width:64px;">€0,00</span>
       </div>
     `;
     document.getElementById('stTradeInRows').appendChild(div);
@@ -1654,7 +1668,7 @@
     function recompute(){
       const market = parseFloat(marketInp.value) || 0;
       const pct = parseFloat(pctInp.value) || 0;
-      div.querySelector('.ti-computed').textContent = '€' + (market * pct / 100).toFixed(2);
+      div.querySelector('.ti-computed').textContent = eur(market * pct / 100);
       updateStTradeSummary();
     }
     marketInp.addEventListener('input', recompute);
@@ -1676,7 +1690,7 @@
 
   function updateStTradeSummary(){
     const outTotal = stCart.reduce((s,i)=>s+(parseFloat(i.sellingPrice)||0),0);
-    document.getElementById('stTradeOutTotal').innerHTML = `Outgoing trade value: <strong>€${outTotal.toFixed(2)}</strong>`;
+    document.getElementById('stTradeOutTotal').innerHTML = `Totale trade-waarde van jouw kaarten: <strong>${eur(outTotal)}</strong>`;
     const inRows = [...document.querySelectorAll('#stTradeInRows .trade-in-row')];
     const inTotal = inRows.reduce((s,row) => {
       const market = parseFloat(row.querySelector('.ti-market').value)||0;
@@ -1686,10 +1700,10 @@
     const cash = parseFloat(document.getElementById('stTradeCashField').value)||0;
     const balance = +(outTotal-inTotal-cash).toFixed(2);
     const box = document.getElementById('stTradeSummaryBox');
-    let msg = `Outgoing: <strong>€${outTotal.toFixed(2)}</strong> · Incoming (na %): <strong>€${inTotal.toFixed(2)}</strong> · Cash: <strong>€${cash.toFixed(2)}</strong><br>`;
+    let msg = `Jij geeft: <strong>${eur(outTotal)}</strong><br>Je krijgt (na %): <strong>${eur(inTotal)}</strong><br>Cash: <strong>${eur(cash)}</strong><br>`;
     if(Math.abs(balance)<0.01){ msg+='Trade is in balans.'; }
-    else if(balance>0){ msg+=`Er ontbreekt nog <strong style="color:#0B8F4F;">€${balance.toFixed(2)}</strong> — koper moet nog bijleggen.`; }
-    else{ msg+=`Jij komt <strong style="color:#B4231F;">€${Math.abs(balance).toFixed(2)}</strong> te kort te geven.`; }
+    else if(balance>0){ msg+=`Er ontbreekt nog <strong style="color:#0A7F6A;">${eur(balance)}</strong> — koper moet nog bijleggen.`; }
+    else{ msg+=`Jij komt <strong style="color:#B4231F;">${eur(Math.abs(balance))}</strong> te kort te geven.`; }
     box.innerHTML = msg; box.dataset.balance = balance;
   }
 
@@ -1891,7 +1905,7 @@
     const isSel = labelCart.has(item.id);
     return `<div class="st-tile ${isSel?'selected':''}" data-id="${item.id}">
       <div class="card-art ${bgClass}">${imgTag}<div class="card-monogram" style="font-size:1.6rem;">${letter}</div><div class="card-art-shine"></div><span class="st-tile-check">✓</span></div>
-      <div class="st-tile-info"><div class="st-tile-name">${item.name}</div><div class="st-tile-price">€${item.sellingPrice}</div></div>
+      <div class="st-tile-info"><div class="st-tile-name">${item.name}</div><div class="st-tile-price">${eur(item.sellingPrice)}</div></div>
     </div>`;
   }
   function renderLabelsGrid(){
