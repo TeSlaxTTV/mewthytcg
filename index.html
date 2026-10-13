@@ -274,6 +274,11 @@
   .picked-chip .pc-name{ font-weight:700; line-height:1.2; }
   .picked-chip .pc-sub{ color:var(--muted); font-size:.85rem; }
   #fResults{ margin-bottom:12px; }
+  .ti-results{ margin-bottom:10px; }
+  .ti-results .pick-wrap{ max-height:38vh; }
+  .ti-results .pick-card{ background:var(--surface); }
+  .ti-picked{ font-size:.85rem; font-weight:600; color:var(--violet-deep); margin:-2px 0 8px; }
+  .ti-picked.hidden, .ti-results.hidden{ display:none; }
   .seg{ display:flex; gap:8px; flex-wrap:wrap; }
   .seg-btn{
     flex:1; min-width:64px; min-height:48px; background:var(--surface); border:1.5px solid var(--line-strong); border-radius:var(--radius-sm);
@@ -1913,8 +1918,7 @@
     div.className = 'trade-in-row';
     div.innerHTML = `
       <div style="display:flex; gap:6px; margin-bottom:6px;">
-        <input type="text" class="ti-name" placeholder="Naam kaart" style="flex:2; min-width:0;">
-        <button type="button" class="btn-lookup ti-search" title="Kaart opzoeken">🔍</button>
+        <input type="text" class="ti-name" placeholder="Naam kaart (bv. Charizard)" autocomplete="off" style="flex:2; min-width:0;">
         <select class="ti-cond" style="flex:0 0 68px;">
           <option value="NM" selected>NM</option>
           <option value="LP">LP</option>
@@ -1924,6 +1928,12 @@
         </select>
         <button type="button" class="tr-remove">×</button>
       </div>
+      <div style="display:flex; gap:6px; margin-bottom:6px;">
+        <select class="ti-set set-select" style="flex:1.6; min-width:0;"><option value="">Alle sets</option></select>
+        <input type="text" class="ti-num" placeholder="Nr." autocomplete="off" style="flex:1; min-width:0;">
+      </div>
+      <div class="ti-results hidden"></div>
+      <div class="ti-picked hidden"></div>
       <div style="display:flex; gap:6px; align-items:center;">
         <input type="number" class="ti-market" placeholder="Marktprijs €" min="0" step="0.5" style="flex:1; min-width:0;">
         <span style="color:var(--muted); font-size:0.78rem; flex-shrink:0;">×</span>
@@ -1944,17 +1954,48 @@
     marketInp.addEventListener('input', recompute);
     pctInp.addEventListener('input', recompute);
     div.querySelector('.tr-remove').addEventListener('click', () => { div.remove(); updateStTradeSummary(); });
-    div.querySelector('.ti-search').addEventListener('click', () => {
-      csTargetRow = div;
-      document.getElementById('csName').value = div.querySelector('.ti-name').value.trim();
-      document.getElementById('csNumber').value = '';
-      csFound = [];
-      document.getElementById('csSet').value = ''; tcgEnsureSets();
-      document.getElementById('csResults').innerHTML = '<div class="lookup-status">Typ een naam (minstens 2 letters) of kies een set.</div>';
-      document.getElementById('csModalOverlay').classList.remove('hidden');
-      document.getElementById('csName').focus();
-      if(document.getElementById('csName').value.trim().length >= 2) csSearch();
-    });
+    // Zoeken direct in de rij (zelfde als bij "Item toevoegen")
+    const nameInp = div.querySelector('.ti-name'), setSel = div.querySelector('.ti-set'), numInp = div.querySelector('.ti-num');
+    const resBox = div.querySelector('.ti-results'), pickedEl = div.querySelector('.ti-picked');
+    div._gen = 0;
+    let tiTimer = null;
+    function tiHide(){ resBox.classList.add('hidden'); resBox.innerHTML = ''; div._gen++; }
+    async function tiSearch(){
+      const name = nameInp.value.trim(), number = numInp.value.trim(), setId = setSel.value;
+      if(!setId && name.length < 2){ tiHide(); return; }
+      pickedEl.classList.add('hidden');
+      resBox.classList.remove('hidden');
+      resBox.innerHTML = '<div class="lookup-status">Zoeken…</div>';
+      const gen = ++div._gen;
+      try{
+        const list = await tcgQuery(name, number, setId);
+        await tcgEnsureSets();
+        if(gen !== div._gen) return;
+        tcgRenderGrid(resBox, list, { setId, alive: () => gen === div._gen, onPick: c => tiPick(c) });
+      } catch(err){ console.error(err); if(gen === div._gen) resBox.innerHTML = '<div class="lookup-status">Opzoeken mislukt — probeer opnieuw.</div>'; }
+    }
+    async function tiPick(c){
+      nameInp.value = c.name;
+      tiHide();
+      pickedEl.textContent = '✓ ' + tcgCardSetName(c) + ' · ' + c.localId;
+      pickedEl.classList.remove('hidden');
+      delete div.dataset.image;
+      try{
+        const res = await fetch('https://api.tcgdex.net/v2/en/cards/' + c.id);
+        const full = res.ok ? await res.json() : null;
+        const imgBase = (full && full.image) || c.image;
+        if(imgBase){ div.dataset.image = imgBase + '/high.png'; }
+        else {
+          const fallback = c._fallbackImage || await fetchPokemonTcgIoImage(c.name, c.localId);
+          if(fallback) div.dataset.image = fallback.large || fallback.small;
+        }
+      } catch(err){ console.error(err); }
+    }
+    function tiDebounced(){ clearTimeout(tiTimer); tiTimer = setTimeout(tiSearch, 300); }
+    nameInp.addEventListener('input', () => { delete div.dataset.image; pickedEl.classList.add('hidden'); tiDebounced(); });
+    numInp.addEventListener('input', tiDebounced);
+    setSel.addEventListener('change', tiSearch);
+    if(tcgSets.length) tcgFillSetSelects(); else tcgEnsureSets();
   }
   document.getElementById('stAddTradeInBtn').addEventListener('click', stAddTradeInRow);
   document.getElementById('stTradeCashField').addEventListener('input', updateStTradeSummary);
