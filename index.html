@@ -382,9 +382,17 @@
   .detail-field-value.mono{ font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.95rem; font-weight:600; }
   .acq-box{ background:var(--surface-raised); border-radius:var(--radius-sm); padding:14px 16px; font-size:0.95rem; line-height:1.6; margin-top:12px; }
 
+  /* ===== Meldingen ===== */
+  .toast-wrap{ position:fixed; left:50%; transform:translateX(-50%); bottom:calc(24px + env(safe-area-inset-bottom)); z-index:300; display:flex; flex-direction:column; gap:10px; align-items:center; pointer-events:none; width:min(560px, calc(100vw - 24px)); }
+  .toast{ pointer-events:auto; width:100%; display:flex; gap:12px; align-items:flex-start; padding:14px 16px; border-radius:14px; background:var(--text); color:#fff; box-shadow:var(--shadow-2); font-weight:600; font-size:0.97rem; line-height:1.4; }
+  .toast.error{ background:#8F1D1A; }
+  .toast.success{ background:var(--mint); }
+  .toast button{ margin-left:auto; background:none; border:none; color:inherit; font-size:1.3rem; line-height:1; cursor:pointer; padding:0 4px; }
+
   /* ===== Phone & small tablet ===== */
   @media (max-width:899px){
     body{ padding-bottom:calc(92px + env(safe-area-inset-bottom)); }
+    .toast-wrap{ bottom:calc(104px + env(safe-area-inset-bottom)); }
     .navbar{ background:#fff; backdrop-filter:none; -webkit-backdrop-filter:none; }
     .navbar-inner{ padding:8px 16px; min-height:60px; gap:12px; }
     .nav-left img{ height:32px; }
@@ -767,6 +775,7 @@
   </div>
 </div>
 
+<div class="toast-wrap" id="toastWrap" aria-live="polite"></div>
 <div id="printLabelsContainer"></div>
 
 <!-- ===== CAMERA BARCODE SCANNER ===== -->
@@ -799,6 +808,45 @@
   };
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
+
+  // Meldingen onderaan het scherm (fouten blijven langer staan dan bevestigingen)
+  function showToast(msg, kind, ms){
+    const wrap = document.getElementById('toastWrap');
+    if(!wrap) return;
+    const dup = [...wrap.children].some(c => c.firstChild && c.firstChild.textContent === msg);
+    if(dup) return;
+    const el = document.createElement('div');
+    el.className = 'toast ' + (kind || '');
+    el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    const span = document.createElement('span'); span.textContent = msg;
+    const x = document.createElement('button'); x.type = 'button'; x.setAttribute('aria-label', 'Sluiten'); x.textContent = '×';
+    x.addEventListener('click', () => el.remove());
+    el.append(span, x);
+    wrap.appendChild(el);
+    setTimeout(() => el.remove(), ms || (kind === 'error' ? 14000 : 3500));
+  }
+  function describeDbError(err, what){
+    const text = String((err && (err.code || err.message)) || err || '');
+    if(/permission/i.test(text)) return what + ' geweigerd door de database (permission denied). De toegangsregels in Firebase zijn waarschijnlijk verlopen.';
+    return what + ' mislukt: ' + ((err && err.message) || err);
+  }
+  // Elke schrijfactie die faalt geeft nu een zichtbare melding
+  (function(){
+    const origRef = db.ref.bind(db);
+    db.ref = function(path){
+      const r = origRef(path);
+      ['set','update','remove'].forEach(m => {
+        if(typeof r[m] !== 'function') return;
+        const orig = r[m].bind(r);
+        r[m] = function(){
+          const p = orig.apply(null, arguments);
+          if(p && typeof p.catch === 'function') p.catch(err => showToast(describeDbError(err, 'Opslaan'), 'error'));
+          return p;
+        };
+      });
+      return r;
+    };
+  })();
 </script>
 <script>
   let itemsData = [];
@@ -1754,14 +1802,14 @@
       const val = snap.val();
       itemsData = val ? Object.values(val) : [];
       renderGrid(); renderDashboard();
-    }, err => console.error('Items laadfout:', err));
+    }, err => { console.error('Items laadfout:', err); showToast(describeDbError(err, 'Laden'), 'error'); });
   }
   function loadTransactions(){
     db.ref('transactions').on('value', snap => {
       const val = snap.val();
       transactionsData = val ? Object.values(val) : [];
       renderDashboard();
-    }, err => console.error('Transacties laadfout:', err));
+    }, err => { console.error('Transacties laadfout:', err); showToast(describeDbError(err, 'Laden'), 'error'); });
   }
 
   renderFilterChips();
@@ -1849,7 +1897,7 @@
       const val = snap.val();
       eventsData = val ? Object.values(val) : [];
       renderEvents();
-    }, err => console.error('Events laadfout:', err));
+    }, err => { console.error('Events laadfout:', err); showToast(describeDbError(err, 'Laden'), 'error'); });
   }
   loadEvents();
 
