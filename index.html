@@ -1155,7 +1155,7 @@
     document.querySelectorAll('select.set-select').forEach(sel => { sel.disabled = true; sel.options[0].textContent = 'Sets laden…'; });
     tcgSetsPromise = (async () => {
       let flat = null, digital = [];
-      try{ const c = JSON.parse(localStorage.getItem('mewthy_sets_v4') || 'null'); if(c && Date.now() - c.t < 7*86400000 && c.s && c.s.length){ flat = c.s; digital = c.d || []; } }catch(e){}
+      try{ const c = JSON.parse(localStorage.getItem('mewthy_sets_v5') || 'null'); if(c && Date.now() - c.t < 7*86400000 && c.s && c.s.length){ flat = c.s; digital = c.d || []; } }catch(e){}
       if(!flat){
         const sr = await fetch('https://api.tcgdex.net/v2/en/series');
         if(!sr.ok) throw new Error('series');
@@ -1172,7 +1172,27 @@
         groups.sort((x, y) => BK_RANK(x.id) - BK_RANK(y.id));
         flat = [];
         groups.forEach(g => g.sets.slice().reverse().forEach(z => flat.push({ id: z.id, name: z.name })));
-        try{ localStorage.setItem('mewthy_sets_v4', JSON.stringify({ t: Date.now(), s: flat, d: digital })); }catch(e){}
+        // Sorteren op uitgavedatum, nieuwste bovenaan (TCGdex sorteert de lijst zelf)
+        try{
+          const or = await fetch('https://api.tcgdex.net/v2/en/sets?sort:field=releaseDate&sort:order=DESC');
+          const order = or.ok ? await or.json() : null;
+          if(Array.isArray(order) && order.length > 20){
+            const phys = {}; flat.forEach(z => { phys[z.id] = z; });
+            let ordered = order.filter(z => z && phys[z.id]);
+            if(ordered.some(z => z.releaseDate)){
+              ordered = ordered.map((z, i) => ({ z, i })).sort((a, b) => {
+                const da = a.z.releaseDate || '', db = b.z.releaseDate || '';
+                if(!da !== !db) return da ? -1 : 1;
+                return da === db ? a.i - b.i : (da < db ? 1 : -1);
+              }).map(x => x.z);
+            }
+            const seen = {}; const sorted = [];
+            ordered.forEach(z => { if(!seen[z.id]){ seen[z.id] = 1; sorted.push({ id: z.id, name: phys[z.id].name }); } });
+            flat.forEach(z => { if(!seen[z.id]) sorted.push(z); });
+            if(sorted.length) flat = sorted;
+          }
+        }catch(e){ console.error(e); }
+        try{ localStorage.setItem('mewthy_sets_v5', JSON.stringify({ t: Date.now(), s: flat, d: digital })); }catch(e){}
       }
       tcgSets = flat;
       flat.forEach(z => { tcgSetNameById[z.id] = z.name; });
