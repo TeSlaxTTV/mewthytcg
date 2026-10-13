@@ -683,6 +683,10 @@
   <div class="modal wide">
     <h2>Meerdere kaarten toevoegen</h2>
     <div class="modal-sub">Vink kaarten aan en vul de Cardmarket-prijs in. Je ziet meteen wat je moet betalen. Zonder verkoopprijs wordt de CM-prijs gebruikt.</div>
+    <div class="field">
+      <label>Set (alleen echte TCG-sets)</label>
+      <select id="bkSet"><option value="">Alle sets</option></select>
+    </div>
     <div class="field-row">
       <div class="field"><label>Naam</label><input type="text" id="bkName" placeholder="bv. Charizard"></div>
       <div class="field"><label>Kaartnummer (optioneel)</label><input type="text" id="bkNumber" placeholder="bv. 199/197"></div>
@@ -691,7 +695,7 @@
       <label>Standaard aankoop %</label>
       <input type="number" id="bkDefaultPct" min="1" max="100" value="80">
     </div>
-    <div id="bkResults"><div class="lookup-status">Typ minstens 2 letters om te zoeken.</div></div>
+    <div id="bkResults"><div class="lookup-status">Kies een set, of typ minstens 2 letters om te zoeken.</div></div>
     <div id="bkEmptyHint" class="bk-empty">Nog geen kaarten gekozen. Zoek een kaart en vink hem aan, dan verschijnt hij hier met zijn prijzen.</div>
     <div id="bkSelectedBox" class="hidden">
       <div class="bk-total"><span>Geselecteerd: <strong id="bkSelectedCount">0</strong></span><span>Totaal te betalen <strong>€<span id="bkTotalCost">0.00</span></strong></span></div>
@@ -1323,27 +1327,80 @@
     } catch(err){ console.error(err); }
   }
 
+  // ---- Sets (alleen echte TCG-sets, geen Pocket) ----
+  const BK_SERIES_ORDER = ['me','sv','swsh','sm','xy','bw','hgss','pl','dp','ex','ecard','neo','gym','base','pop','np'];
+  const bkSetCards = {};
+  let bkSetsLoaded = false;
+  function bkSetName(){ const sel = document.getElementById('bkSet'); return sel.value ? sel.options[sel.selectedIndex].textContent : ''; }
+  async function bkLoadSets(){
+    if(bkSetsLoaded) return;
+    const sel = document.getElementById('bkSet');
+    let groups = null;
+    try{ const c = JSON.parse(localStorage.getItem('mewthy_sets_v1') || 'null'); if(c && Date.now() - c.t < 7*86400000) groups = c.g; }catch(e){}
+    if(!groups){
+      sel.disabled = true; sel.options[0].textContent = 'Sets laden…';
+      try{
+        const sr = await fetch('https://api.tcgdex.net/v2/en/series');
+        if(!sr.ok) throw new Error('series');
+        const series = (await sr.json()).filter(x => x.id !== 'tcgp' && !/pocket/i.test(x.name || ''));
+        const details = await Promise.all(series.map(x => fetch('https://api.tcgdex.net/v2/en/series/' + x.id).then(r => r.ok ? r.json() : null).catch(() => null)));
+        groups = details.filter(d => d && d.sets && d.sets.length).map(d => ({
+          id: d.id, name: d.name,
+          sets: d.sets.slice().reverse().map(z => ({ id: z.id, name: z.name, total: z.cardCount && (z.cardCount.official || z.cardCount.total) }))
+        }));
+        const rank = g => { const i = BK_SERIES_ORDER.indexOf(g.id); return i < 0 ? -1 : i; };
+        groups.sort((x, y) => rank(x) - rank(y));
+        try{ localStorage.setItem('mewthy_sets_v1', JSON.stringify({ t: Date.now(), g: groups })); }catch(e){}
+      }catch(err){
+        console.error(err);
+        sel.disabled = false; sel.options[0].textContent = 'Alle sets (setlijst laden mislukt)';
+        return;
+      }
+    }
+    sel.innerHTML = '<option value="">Alle sets</option>' + groups.map(g =>
+      '<optgroup label="' + g.name.replace(/"/g, '&quot;') + '">' + g.sets.map(z =>
+        '<option value="' + z.id + '">' + z.name + (z.total ? ' (' + z.total + ')' : '') + '</option>').join('') + '</optgroup>').join('');
+    sel.disabled = false; bkSetsLoaded = true;
+  }
+  async function bkGetSetCards(setId){
+    if(bkSetCards[setId]) return bkSetCards[setId];
+    const r = await fetch('https://api.tcgdex.net/v2/en/sets/' + setId);
+    if(!r.ok) throw new Error('set');
+    const d = await r.json();
+    bkSetCards[setId] = d.cards || [];
+    return bkSetCards[setId];
+  }
+  function bkNumKey(v){ return String(v || '').split('/')[0].trim().toLowerCase().replace(/^0+(?=.)/, ''); }
+
   async function bkSearch(){
     const name = document.getElementById('bkName').value.trim();
     const number = document.getElementById('bkNumber').value.trim();
+    const setId = document.getElementById('bkSet').value;
     const box = document.getElementById('bkResults');
-    if(!name){ box.innerHTML = '<div class="lookup-status">Typ minstens 2 letters om te zoeken.</div>'; return; }
+    if(!name && !setId){ box.innerHTML = '<div class="lookup-status">Kies een set, of typ minstens 2 letters om te zoeken.</div>'; return; }
     box.innerHTML = '<div class="lookup-status">Zoeken…</div>';
     const gen = ++bkSearchGen;
-    let url = 'https://api.tcgdex.net/v2/en/cards?name=' + encodeURIComponent(name);
-    if(number) url += '&localId=' + encodeURIComponent(number);
     try{
-      const res = await fetch(url);
-      if(!res.ok) throw new Error('fail');
-      const data = await res.json();
+      let data;
+      if(setId){
+        data = await bkGetSetCards(setId);
+        const q = name.toLowerCase(), nk = bkNumKey(number);
+        data = data.filter(c => (!q || (c.name || '').toLowerCase().includes(q)) && (!nk || bkNumKey(c.localId) === nk));
+      } else {
+        let url = 'https://api.tcgdex.net/v2/en/cards?name=' + encodeURIComponent(name);
+        if(number) url += '&localId=' + encodeURIComponent(number);
+        const res = await fetch(url);
+        if(!res.ok) throw new Error('fail');
+        data = await res.json();
+      }
       if(gen !== bkSearchGen) return;
-      bkFound = (data || []).slice(0, 40);
-      if(bkFound.length === 0){ box.innerHTML = '<div class="lookup-status">Geen resultaten — probeer een andere naam of pas het nummer aan.</div>'; return; }
+      bkFound = (data || []).slice(0, setId ? 500 : 40);
+      if(bkFound.length === 0){ box.innerHTML = '<div class="lookup-status">Geen resultaten' + (setId ? ' in deze set' : '') + ' — probeer een andere naam of pas het nummer aan.</div>'; return; }
       box.innerHTML = bkFound.map((c,i) => `
         <div class="cs-row bk-pick-row" data-idx="${i}">
           <input type="checkbox" class="bk-check" data-cardid="${c.id}" data-idx="${i}" ${bkSelected[c.id] ? 'checked' : ''}>
           <img class="cs-thumb" src="${c.image ? c.image+'/low.png' : ''}" alt="" onerror="this.style.visibility='hidden'">
-          <div class="cs-info"><div class="cs-name">${c.name}</div><div class="cs-set">#${c.localId||''} · ${c.id}</div></div>
+          <div class="cs-info"><div class="cs-name">${c.name}</div><div class="cs-set">#${c.localId||''} · ${setId ? bkSetName() : c.id}</div></div>
         </div>`).join('');
       box.querySelectorAll('.bk-check').forEach(chk => {
         chk.addEventListener('click', (e) => e.stopPropagation());
@@ -1356,8 +1413,9 @@
           bkToggleCard(bkFound[parseInt(row.dataset.idx,10)], chk.checked);
         });
       });
+      let bkFbCount = 0;
       bkFound.forEach((c, i) => {
-        if(c.image) return;
+        if(c.image || ++bkFbCount > 30) return;
         fetchPokemonTcgIoImage(c.name, c.localId).then(fallback => {
           if(gen !== bkSearchGen || !fallback) return;
           c._fallbackImage = fallback;
@@ -1371,12 +1429,14 @@
   document.getElementById('bkNumber').addEventListener('keydown', (e) => { if(e.key==='Enter'){ e.preventDefault(); bkSearch(); } });
   document.getElementById('bkName').addEventListener('input', () => {
     clearTimeout(bkDebounce);
-    bkDebounce = setTimeout(() => { if(document.getElementById('bkName').value.trim().length >= 2) bkSearch(); }, 300);
+    bkDebounce = setTimeout(() => { if(document.getElementById('bkSet').value || document.getElementById('bkName').value.trim().length >= 2) bkSearch(); }, 300);
   });
   document.getElementById('bkNumber').addEventListener('input', () => {
     clearTimeout(bkDebounce);
-    bkDebounce = setTimeout(() => { if(document.getElementById('bkName').value.trim()) bkSearch(); }, 300);
+    bkDebounce = setTimeout(() => { if(document.getElementById('bkSet').value || document.getElementById('bkName').value.trim()) bkSearch(); }, 300);
   });
+
+  document.getElementById('bkSet').addEventListener('change', bkSearch);
 
   function openBulkModal(){
     bkFound = [];
@@ -1384,8 +1444,10 @@
     bkSearchGen++;
     document.getElementById('bkName').value = '';
     document.getElementById('bkNumber').value = '';
-    document.getElementById('bkResults').innerHTML = '<div class="lookup-status">Typ minstens 2 letters om te zoeken.</div>';
+    document.getElementById('bkSet').value = '';
+    document.getElementById('bkResults').innerHTML = '<div class="lookup-status">Kies een set, of typ minstens 2 letters om te zoeken.</div>';
     bkRenderSelected();
+    bkLoadSets();
     document.getElementById('bulkModalOverlay').classList.remove('hidden');
     document.getElementById('bkName').focus();
   }
