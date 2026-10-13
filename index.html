@@ -279,6 +279,15 @@
   .ti-results .pick-card{ background:var(--surface); }
   .ti-picked{ font-size:.85rem; font-weight:600; color:var(--violet-deep); margin:-2px 0 8px; }
   .ti-picked.hidden, .ti-results.hidden{ display:none; }
+  .cm-chip{ position:absolute; right:8px; bottom:8px; z-index:3; background:#fff; color:var(--violet-deep); font-weight:800; font-size:.72rem; letter-spacing:.04em; padding:4px 8px; border-radius:999px; text-decoration:none; box-shadow:0 1px 4px rgba(0,0,0,.25); }
+  .cm-chip:hover{ background:var(--violet-deep); color:#fff; }
+  .cm-inline{ display:inline-block; margin-top:4px; color:var(--violet-deep); font-weight:700; font-size:.85rem; text-decoration:none; }
+  .cm-inline:hover{ text-decoration:underline; }
+  .cm-btn{ display:inline-flex; align-items:center; justify-content:center; text-decoration:none; }
+  @media (max-width:700px){
+    #detailModalOverlay .modal-actions{ flex-wrap:wrap; }
+    #detailModalOverlay .cm-btn{ flex:1 0 100%; order:-1; }
+  }
   .seg{ display:flex; gap:8px; flex-wrap:wrap; }
   .seg-btn{
     flex:1; min-width:64px; min-height:48px; background:var(--surface); border:1.5px solid var(--line-strong); border-radius:var(--radius-sm);
@@ -748,6 +757,7 @@
     <div class="acq-box" id="detailAcqBox"></div>
     <div class="modal-actions">
       <button type="button" class="btn-ghost btn-danger" id="deleteItemBtn">Verwijderen</button>
+      <a class="btn-ghost cm-btn" id="detailCmLink" href="#" target="_blank" rel="noopener" title="Open op Cardmarket (alleen Engels, verkopers uit BE/LU/NL)">Cardmarket ↗</a>
       <button type="button" class="btn-ghost" id="editItemBtn">Bewerken</button>
       <button type="button" class="btn-primary" id="closeDetailBtn">Sluiten</button>
     </div>
@@ -978,6 +988,7 @@
         <div class="card-art-shine"></div>
         <span class="cond-chip">${condLabel(item)}</span>
         <span class="type-chip">${item.itemType}</span>
+        ${item.itemType === 'Sealed' || item.itemType === 'Other' ? '' : cmLinkHTML(item.name, 'cm-chip', 'CM')}
       </div>
       <div class="card-info">
         <div class="card-barcode mono">${item.barcode||item.id}</div>
@@ -1131,6 +1142,17 @@
     if(document.getElementById('csName').value.trim().length >= 2) csSearch();
   }
   document.getElementById('csCloseBtn').addEventListener('click', () => document.getElementById('csModalOverlay').classList.add('hidden'));
+
+  // ===== Cardmarket-link: Engelse kaarten van verkopers uit BE / LU / NL =====
+  // Landnummers van Cardmarket: BE = 2, LU = 21, NL = 23 (language=1 is Engels). Hier aan te passen.
+  const CM_SELLER_COUNTRIES = '2,21,23';
+  function cardmarketUrl(name){
+    return 'https://www.cardmarket.com/en/Pokemon/Products/Search?searchString=' + encodeURIComponent(String(name || '').trim()) +
+      '&language=1&sellerCountry=' + encodeURIComponent(CM_SELLER_COUNTRIES);
+  }
+  function cmLinkHTML(name, cls, label){
+    return '<a class="' + cls + '" href="' + escHtml(cardmarketUrl(name)) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open op Cardmarket (alleen Engels, verkopers uit BE/LU/NL)">' + (label || 'Cardmarket') + ' ↗</a>';
+  }
 
   // ===== Gedeelde kaartzoeker (één kaart + meerdere kaarten) =====
   const TCG_SERIES_ORDER = ['me','sv','swsh','sm','xy','bw','hgss','pl','dp','ex','ecard','neo','gym','base','pop','np'];
@@ -1397,7 +1419,7 @@
     fHideResults();
     const chip = document.getElementById('fPicked');
     const img = c.image ? '<img src="' + escHtml(c.image) + '/low.png" alt="" onerror="this.style.visibility=\'hidden\'">' : '';
-    chip.innerHTML = img + '<div><div class="pc-name">' + escHtml(c.name) + '</div><div class="pc-sub">' + escHtml(tcgCardSetName(c)) + ' · ' + escHtml(c.localId) + ' — gekozen</div></div>';
+    chip.innerHTML = img + '<div><div class="pc-name">' + escHtml(c.name) + '</div><div class="pc-sub">' + escHtml(tcgCardSetName(c)) + ' · ' + escHtml(c.localId) + ' — gekozen</div>' + cmLinkHTML(c.name, 'cm-inline', 'Cardmarket-prijs bekijken') + '</div>';
     chip.classList.remove('hidden');
   }
   function addSearchDebounced(){ clearTimeout(fDebounce); fDebounce = setTimeout(addSearch, 300); }
@@ -1464,6 +1486,7 @@
             <div style="flex:1; min-width:0;">
               <div class="cs-name">${s.c.name}</div>
               <div class="cs-set">#${s.c.localId || ''} · ${s.c.id}</div>
+              ${cmLinkHTML(s.c.name, 'cm-inline', 'Cardmarket-prijs bekijken')}
             </div>
             <button type="button" class="btn-ghost bk-remove" aria-label="Verwijder ${s.c.name}">Verwijderen</button>
           </div>
@@ -1694,6 +1717,7 @@
   let currentDetailItem = null;
   function openDetailModal(item){
     currentDetailItem = item;
+    document.getElementById('detailCmLink').href = cardmarketUrl(item.name);
     document.getElementById('detailName').textContent = item.name;
     document.getElementById('detailSub').textContent = [item.set, item.cardNumber].filter(Boolean).join(' · ') || item.itemType;
     document.getElementById('detailSelling').textContent = eur(item.sellingPrice);
