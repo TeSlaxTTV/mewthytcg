@@ -1144,8 +1144,8 @@
   document.getElementById('csCloseBtn').addEventListener('click', () => document.getElementById('csModalOverlay').classList.add('hidden'));
 
   // ===== Cardmarket-link: Engelse kaarten van verkopers uit BE / LU / NL =====
-  // Landnummers van Cardmarket: BE = 2, LU = 21, NL = 23 (language=1 is Engels). Hier aan te passen.
-  const CM_SELLER_COUNTRIES = '2,21,23';
+  // Landnummers van Cardmarket: BE = 2, LU = 20, NL = 23 (language=1 is Engels). Hier aan te passen.
+  const CM_SELLER_COUNTRIES = '2,20,23';
   function cardmarketUrl(name){
     return 'https://www.cardmarket.com/en/Pokemon/Products/Search?searchString=' + encodeURIComponent(String(name || '').trim()) +
       '&language=1&sellerCountry=' + encodeURIComponent(CM_SELLER_COUNTRIES);
