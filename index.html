@@ -988,7 +988,7 @@
         <div class="card-art-shine"></div>
         <span class="cond-chip">${condLabel(item)}</span>
         <span class="type-chip">${item.itemType}</span>
-        ${item.itemType === 'Sealed' || item.itemType === 'Other' ? '' : cmLinkHTML(item.name, 'cm-chip', 'CM')}
+        ${item.itemType === 'Sealed' || item.itemType === 'Other' ? '' : cmLinkHTML({ name: item.name, setName: item.set || '', number: item.cardNumber || '' }, 'cm-chip', 'CM')}
       </div>
       <div class="card-info">
         <div class="card-barcode mono">${item.barcode||item.id}</div>
@@ -1150,9 +1150,64 @@
     return 'https://www.cardmarket.com/en/Pokemon/Products/Search?searchString=' + encodeURIComponent(String(name || '').trim()) +
       '&language=1&sellerCountry=' + encodeURIComponent(CM_SELLER_COUNTRIES);
   }
-  function cmLinkHTML(name, cls, label){
-    return '<a class="' + cls + '" href="' + escHtml(cardmarketUrl(name)) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open op Cardmarket (alleen Engels, verkopers uit BE/LU/NL)">' + (label || 'Cardmarket') + ' ↗</a>';
+  // info = { name, setName, number, setId } — zoveel als bekend is
+  function cmLinkHTML(info, cls, label){
+    if(typeof info === 'string') info = { name: info };
+    return '<a class="' + cls + '" href="' + escHtml(cardmarketUrl(info.name)) + '" target="_blank" rel="noopener"' +
+      ' data-cm="' + escHtml(JSON.stringify(info)) + '" onclick="event.stopPropagation(); return cmOpen(event, this);"' +
+      ' title="Open op Cardmarket (alleen Engels, verkopers uit BE/LU/NL)">' + (label || 'Cardmarket') + ' ↗</a>';
   }
+  // Cardmarket-adres zoals: Singles/Darkness-Ablaze/Charizard-VMAX-DAA20  of  .../Mew-ex-V2-30C152 (bij meerdere versies)
+  function cmSlug(v){
+    return String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/['’]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+  const cmSetInfo = {};
+  async function cmSetDetail(setId){
+    if(cmSetInfo[setId]) return cmSetInfo[setId];
+    const r = await fetch('https://api.tcgdex.net/v2/en/sets/' + setId);
+    if(!r.ok) throw new Error('set');
+    const d = await r.json();
+    tcgSetCards[setId] = tcgSetCards[setId] || d.cards || [];
+    cmSetInfo[setId] = d;
+    return d;
+  }
+  async function cmProductUrl(info){
+    await tcgEnsureSets();
+    let setId = info.setId;
+    if(!setId && info.setName){
+      const want = info.setName.trim().toLowerCase();
+      const hit = tcgSets.find(z => z.name.trim().toLowerCase() === want);
+      if(hit) setId = hit.id;
+    }
+    if(!setId || !info.name) return null;
+    const d = await cmSetDetail(setId);
+    const code = (d.abbreviation && (d.abbreviation.official || d.abbreviation.normal)) || d.tcgOnline;
+    const num = tcgNumKey(info.number);
+    if(!code || !num) return null;
+    const same = (d.cards || []).filter(c => (c.name || '').trim().toLowerCase() === info.name.trim().toLowerCase());
+    const numOf = c => { const n = parseInt(tcgNumKey(c.localId), 10); return isNaN(n) ? 1e9 : n; };
+    same.sort((a, b) => numOf(a) - numOf(b) || String(a.localId).localeCompare(String(b.localId)));
+    let version = '';
+    if(same.length > 1){
+      const idx = same.findIndex(c => tcgNumKey(c.localId) === num);
+      if(idx < 0) return null;
+      version = '-V' + (idx + 1);
+    }
+    return 'https://www.cardmarket.com/en/Pokemon/Products/Singles/' + cmSlug(d.name || info.setName) + '/' +
+      cmSlug(info.name) + version + '-' + String(code).toUpperCase() + num.toUpperCase() +
+      '?sellerCountry=' + CM_SELLER_COUNTRIES + '&language=1';
+  }
+  // Opent de kaartpagina direct; lukt dat niet, dan de zoekpagina (zelfde filters).
+  function cmOpen(ev, a){
+    let info; try{ info = JSON.parse(a.getAttribute('data-cm') || '{}'); }catch(e){ return true; }
+    if(!info.setName && !info.setId) return true;
+    ev.preventDefault();
+    const w = window.open('about:blank', '_blank');
+    const go = url => { if(w && !w.closed){ try{ w.opener = null; }catch(e){} w.location.href = url; } else { window.open(url, '_blank', 'noopener'); } };
+    cmProductUrl(info).then(url => go(url || cardmarketUrl(info.name))).catch(() => go(cardmarketUrl(info.name)));
+    return false;
+  }
+  window.cmOpen = cmOpen;
 
   // ===== Gedeelde kaartzoeker (één kaart + meerdere kaarten) =====
   const TCG_SERIES_ORDER = ['me','sv','swsh','sm','xy','bw','hgss','pl','dp','ex','ecard','neo','gym','base','pop','np'];
@@ -1419,7 +1474,7 @@
     fHideResults();
     const chip = document.getElementById('fPicked');
     const img = c.image ? '<img src="' + escHtml(c.image) + '/low.png" alt="" onerror="this.style.visibility=\'hidden\'">' : '';
-    chip.innerHTML = img + '<div><div class="pc-name">' + escHtml(c.name) + '</div><div class="pc-sub">' + escHtml(tcgCardSetName(c)) + ' · ' + escHtml(c.localId) + ' — gekozen</div>' + cmLinkHTML(c.name, 'cm-inline', 'Cardmarket-prijs bekijken') + '</div>';
+    chip.innerHTML = img + '<div><div class="pc-name">' + escHtml(c.name) + '</div><div class="pc-sub">' + escHtml(tcgCardSetName(c)) + ' · ' + escHtml(c.localId) + ' — gekozen</div>' + cmLinkHTML({ name: c.name, number: c.localId, setId: (function(){ const n = tcgCardSetName(c); const h = tcgSets.find(z => z.name === n); return h ? h.id : ''; })() }, 'cm-inline', 'Cardmarket-prijs bekijken') + '</div>';
     chip.classList.remove('hidden');
   }
   function addSearchDebounced(){ clearTimeout(fDebounce); fDebounce = setTimeout(addSearch, 300); }
@@ -1486,7 +1541,7 @@
             <div style="flex:1; min-width:0;">
               <div class="cs-name">${s.c.name}</div>
               <div class="cs-set">#${s.c.localId || ''} · ${s.c.id}</div>
-              ${cmLinkHTML(s.c.name, 'cm-inline', 'Cardmarket-prijs bekijken')}
+              ${cmLinkHTML({ name: s.c.name, number: s.c.localId, setId: (function(){ const n = tcgCardSetName(s.c); const h = tcgSets.find(z => z.name === n); return h ? h.id : ''; })() }, 'cm-inline', 'Cardmarket-prijs bekijken')}
             </div>
             <button type="button" class="btn-ghost bk-remove" aria-label="Verwijder ${s.c.name}">Verwijderen</button>
           </div>
@@ -1717,7 +1772,9 @@
   let currentDetailItem = null;
   function openDetailModal(item){
     currentDetailItem = item;
-    document.getElementById('detailCmLink').href = cardmarketUrl(item.name);
+    { const l = document.getElementById('detailCmLink'); l.href = cardmarketUrl(item.name);
+      l.setAttribute('data-cm', JSON.stringify({ name: item.name, setName: item.set || '', number: item.cardNumber || '' }));
+      l.onclick = ev => cmOpen(ev, l); }
     document.getElementById('detailName').textContent = item.name;
     document.getElementById('detailSub').textContent = [item.set, item.cardNumber].filter(Boolean).join(' · ') || item.itemType;
     document.getElementById('detailSelling').textContent = eur(item.sellingPrice);
