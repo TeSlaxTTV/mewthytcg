@@ -1142,26 +1142,36 @@
     });
     syncAddSetSelect();
   }
+  const tcgDigitalIds = {};
+  const isDigitalSetMeta = z => /^(A|B)\d+[a-z]?$/.test(z.id) || /^P-[AB]$/.test(z.id) || /pocket|\bTCGO\b|online|digital/i.test(z.name || '');
+  const isDigitalSerie = x => x.id === 'tcgp' || /pocket|online|live|digital|\bgame\b/i.test(x.name || '');
   function tcgEnsureSets(){
     if(tcgSetsPromise) return tcgSetsPromise;
     document.querySelectorAll('select.set-select').forEach(sel => { sel.disabled = true; sel.options[0].textContent = 'Sets laden…'; });
     tcgSetsPromise = (async () => {
-      let flat = null;
-      try{ const c = JSON.parse(localStorage.getItem('mewthy_sets_v2') || 'null'); if(c && Date.now() - c.t < 7*86400000 && c.s && c.s.length) flat = c.s; }catch(e){}
+      let flat = null, digital = [];
+      try{ const c = JSON.parse(localStorage.getItem('mewthy_sets_v4') || 'null'); if(c && Date.now() - c.t < 7*86400000 && c.s && c.s.length){ flat = c.s; digital = c.d || []; } }catch(e){}
       if(!flat){
         const sr = await fetch('https://api.tcgdex.net/v2/en/series');
         if(!sr.ok) throw new Error('series');
-        const series = (await sr.json()).filter(x => x.id !== 'tcgp' && !/pocket/i.test(x.name || ''));
-        const details = await Promise.all(series.map(x => fetch('https://api.tcgdex.net/v2/en/series/' + x.id).then(r => r.ok ? r.json() : null).catch(() => null)));
-        const groups = details.filter(d => d && d.sets && d.sets.length);
-        const rank = g => BK_RANK(g.id);
-        groups.sort((x, y) => rank(x) - rank(y));
+        const all = await sr.json();
+        const details = await Promise.all(all.map(x => fetch('https://api.tcgdex.net/v2/en/series/' + x.id).then(r => r.ok ? r.json() : null).catch(() => null)));
+        const groups = [];
+        all.forEach((x, i) => {
+          const d = details[i]; if(!d || !d.sets || !d.sets.length) return;
+          const digSerie = isDigitalSerie(x);
+          const phys = [];
+          d.sets.forEach(z => { if(digSerie || isDigitalSetMeta(z)) digital.push(z.id); else phys.push(z); });
+          if(phys.length) groups.push({ id: x.id, sets: phys });
+        });
+        groups.sort((x, y) => BK_RANK(x.id) - BK_RANK(y.id));
         flat = [];
         groups.forEach(g => g.sets.slice().reverse().forEach(z => flat.push({ id: z.id, name: z.name })));
-        try{ localStorage.setItem('mewthy_sets_v2', JSON.stringify({ t: Date.now(), s: flat })); }catch(e){}
+        try{ localStorage.setItem('mewthy_sets_v4', JSON.stringify({ t: Date.now(), s: flat, d: digital })); }catch(e){}
       }
       tcgSets = flat;
       flat.forEach(z => { tcgSetNameById[z.id] = z.name; });
+      digital.forEach(id => { tcgDigitalIds[id] = true; });
       tcgFillSetSelects();
     })().catch(err => {
       console.error(err);
@@ -1169,6 +1179,12 @@
       document.querySelectorAll('select.set-select').forEach(sel => { sel.disabled = false; sel.options[0].textContent = 'Alle sets (laden mislukt)'; });
     });
     return tcgSetsPromise;
+  }
+  // Is dit een kaart uit een digitale (Pocket/game) set? Dan tonen we hem niet.
+  function tcgIsDigitalCard(c){
+    const id = String(c.id || '');
+    if(/^(A|B)\d+[a-z]?-/.test(id) || /^P-[AB]-/.test(id)) return true;
+    return Object.keys(tcgDigitalIds).some(k => id.indexOf(k + '-') === 0);
   }
   function BK_RANK(id){ const i = TCG_SERIES_ORDER.indexOf(id); return i < 0 ? -1 : i; }
   async function tcgSetCardsFor(setId){
@@ -1189,7 +1205,9 @@
     if(number) url += '&localId=' + encodeURIComponent(number);
     const res = await fetch(url);
     if(!res.ok) throw new Error('fail');
-    return (await res.json()) || [];
+    const found = (await res.json()) || [];
+    await tcgEnsureSets();
+    return found.filter(c => !tcgIsDigitalCard(c));
   }
   function tcgCardSetName(c){
     const id = c.id || '';
