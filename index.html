@@ -452,6 +452,11 @@
 
   /* Kaart-look: elke tegel lijkt op een echte TCG-kaart (eigen ontwerp) */
   .card-tile{ border:0; padding:6px; background:linear-gradient(140deg, #F9DD5E 0%, #E8A92B 48%, #F9DD5E 100%); border-radius:18px; }
+  /* Even hoge kaarten in een rij: het crèmevlak vult de hele hoogte, de rand blijft overal even dik */
+  .card-tile{ display:flex; flex-direction:column; }
+  .card-tile .card-art{ flex:0 0 auto; }
+  .card-tile .card-info{ flex:1 1 auto; display:flex; flex-direction:column; }
+  .card-tile .card-prices{ margin-top:auto; }
   .card-tile .card-art{ border-radius:10px 10px 0 0; box-shadow:inset 0 0 0 2px rgba(120,80,0,.28); }
   .card-tile .card-info{ background:#FFFBEA; border-radius:0 0 10px 10px; box-shadow:inset 0 0 0 2px rgba(120,80,0,.18); }
   .card-tile .card-prices{ border-top:1px dashed #E3C766; }
