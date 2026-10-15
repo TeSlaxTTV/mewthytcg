@@ -1192,14 +1192,19 @@
     const same = (d.cards || []).filter(c => (c.name || '').trim().toLowerCase() === info.name.trim().toLowerCase());
     const numOf = c => { const n = parseInt(tcgNumKey(c.localId), 10); return isNaN(n) ? 1e9 : n; };
     same.sort((a, b) => numOf(a) - numOf(b) || String(a.localId).localeCompare(String(b.localId)));
-    let version = '';
+    let version = '', suffix = '-' + String(code).toUpperCase() + num.toUpperCase();
     if(same.length > 1){
       const idx = same.findIndex(c => tcgNumKey(c.localId) === num);
       if(idx < 0) return null;
       version = '-V' + (idx + 1);
+      // Cardmarket: bij oudere series (t/m Sword & Shield) hebben kaarten met meerdere versies geen setcode+nummer
+      // (bv. Fusion-Strike/Greedent-V-V3), bij Scarlet & Violet en nieuwer wel (bv. 30th-Celebration/Mew-ex-V2-30C152).
+      const serieId = (d.serie && d.serie.id) || '';
+      const OLD_SERIES = ['swsh','sm','xy','bw','hgss','pl','dp','ex','ecard','neo','gym','base','pop','np','col'];
+      if(OLD_SERIES.indexOf(serieId) >= 0) suffix = '';
     }
     return 'https://www.cardmarket.com/en/Pokemon/Products/Singles/' + cmSlug(d.name || info.setName) + '/' +
-      cmSlug(info.name) + version + '-' + String(code).toUpperCase() + num.toUpperCase() +
+      cmSlug(info.name) + version + suffix +
       '?sellerCountry=' + CM_SELLER_COUNTRIES + '&language=1';
   }
   // Opent de kaartpagina direct; lukt dat niet, dan de zoekpagina (zelfde filters).
