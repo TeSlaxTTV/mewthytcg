@@ -1166,6 +1166,10 @@
   function cmSlug(v){
     return String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/['’]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   }
+  // Sets waar Cardmarket een andere naam of code gebruikt dan TCGdex (aan te vullen met voorbeelden)
+  const CM_SET_OVERRIDES = {
+    svp: { slug: 'SV-Black-Star-Promos', code: 'SVP' }
+  };
   const cmSetInfo = {};
   async function cmSetDetail(setId){
     if(cmSetInfo[setId]) return cmSetInfo[setId];
@@ -1186,7 +1190,8 @@
     }
     if(!setId || !info.name) return null;
     const d = await cmSetDetail(setId);
-    const code = (d.abbreviation && (d.abbreviation.official || d.abbreviation.normal)) || d.tcgOnline;
+    const ov = CM_SET_OVERRIDES[setId] || (/^SVP\b.*Black Star Promos$/i.test(d.name || '') ? CM_SET_OVERRIDES.svp : null) || {};
+    const code = ov.code || (d.abbreviation && (d.abbreviation.official || d.abbreviation.normal)) || d.tcgOnline;
     const num = tcgNumKey(info.number);
     if(!code || !num) return null;
     const same = (d.cards || []).filter(c => (c.name || '').trim().toLowerCase() === info.name.trim().toLowerCase());
@@ -1203,7 +1208,7 @@
       const OLD_SERIES = ['swsh','sm','xy','bw','hgss','pl','dp','ex','ecard','neo','gym','base','pop','np','col'];
       if(OLD_SERIES.indexOf(serieId) >= 0) suffix = '';
     }
-    return 'https://www.cardmarket.com/en/Pokemon/Products/Singles/' + cmSlug(d.name || info.setName) + '/' +
+    return 'https://www.cardmarket.com/en/Pokemon/Products/Singles/' + (ov.slug || cmSlug(d.name || info.setName)) + '/' +
       cmSlug(info.name) + version + suffix +
       '?sellerCountry=' + CM_SELLER_COUNTRIES + '&language=1';
   }
