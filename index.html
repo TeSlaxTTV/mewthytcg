@@ -993,7 +993,7 @@
         <div class="card-art-shine"></div>
         <span class="cond-chip">${condLabel(item)}</span>
         <span class="type-chip">${item.itemType}</span>
-        ${item.itemType === 'Sealed' || item.itemType === 'Other' ? '' : cmLinkHTML({ name: item.name, setName: item.set || '', number: item.cardNumber || '' }, 'cm-chip', 'CM')}
+        ${item.itemType === 'Sealed' || item.itemType === 'Other' ? '' : cmLinkHTML({ name: item.name, setName: item.set || '', number: item.cardNumber || '', setId: item.tcgSet || '', lid: item.tcgLid || '' }, 'cm-chip', 'CM')}
       </div>
       <div class="card-info">
         <div class="card-barcode mono">${item.barcode||item.id}</div>
@@ -1132,6 +1132,7 @@
   document.querySelectorAll('#acqSeg .seg-btn').forEach(b => b.addEventListener('click', () => setActiveSeg('acqSeg', b.dataset.acq)));
 
   let selectedImage = null;
+  let selectedTcg;  // undefined = ongemoeid, null = gewist, {set, lid} = gekozen kaart
   let csFound = [];
   let csTargetRow = null;
 
@@ -1209,28 +1210,58 @@
     const hit = tcgSets.find(z => z.name.trim().toLowerCase() === want);
     return hit ? hit.id : '';
   }
-  async function cmProductIdUrl(info){
-    const setId = await cmFindSetId(info);
-    const num = tcgNumKey(info.number);
-    if(!setId || !num) return null;
-    const ids = await cmLoadIds();
-    const bySet = ids[setId];
-    if(bySet){
-      if(bySet[info.number]) return cmIdUrl(bySet[info.number]);
-      const k = Object.keys(bySet).find(x => tcgNumKey(x) === num);
-      if(k) return cmIdUrl(bySet[k]);
-    }
-    // Nieuwere kaarten: misschien geeft TCGdex het productnummer zelf mee
-    const d = await cmSetDetail(setId);
-    const card = (d.cards || []).find(c => tcgNumKey(c.localId) === num);
-    if(card){
-      const r = await fetch('https://api.tcgdex.net/v2/en/cards/' + card.id);
-      const full = r.ok ? await r.json() : null;
-      let id = full && full.thirdParty && full.thirdParty.cardmarket;
-      if(!id && full && Array.isArray(full.variants)) for(const v of full.variants){ if(v && v.thirdParty && v.thirdParty.cardmarket){ id = v.thirdParty.cardmarket; break; } }
-      if(id) return cmIdUrl(id);
-    }
+  function cmIdFromCard(full){
+    if(!full) return null;
+    if(full.thirdParty && full.thirdParty.cardmarket) return full.thirdParty.cardmarket;
+    for(const v of (full.variants_detailed || [])){ if(v && v.thirdParty && v.thirdParty.cardmarket) return v.thirdParty.cardmarket; }
+    if(full.pricing && full.pricing.cardmarket && full.pricing.cardmarket.idProduct) return full.pricing.cardmarket.idProduct;
     return null;
+  }
+  // Zoekt de TCGdex-kaart bij een opgeslagen kaart (set + gedrukt nummer + naam)
+  async function tcgResolveCard(info){
+    const setId = await cmFindSetId(info);
+    const nk = tcgNumKey(info.number);
+    if(!setId || !nk) return null;
+    const sids = [setId].concat(TCG_SUBSETS[setId] || []);
+    let all = [];
+    for(const sid of sids){ try{ all = all.concat(await tcgSetCardsFor(sid)); }catch(e){} }
+    const byPrinted = all.filter(c => tcgNumMatches(c, nk));
+    const byLid = all.filter(c => tcgNumKey(c.localId) === nk);   // oudere opslag: TCGdex-nummer
+    if(info.name){
+      const n = tcgNameKey(info.name);
+      const p1 = byPrinted.filter(c => tcgNameKey(c.name) === n);
+      if(p1.length) return p1[0];
+      const p2 = byLid.filter(c => tcgNameKey(c.name) === n);
+      if(p2.length) return p2[0];
+    }
+    return byPrinted.length === 1 ? byPrinted[0] : null;  // naam afwijkend (zelf getypt): enkel bij één duidelijke kaart
+  }
+  async function cmProductIdUrl(info){
+    const ids = await cmLoadIds();
+    if(info.setId && info.lid){
+      const bySet = ids[info.setId];
+      if(bySet && bySet[info.lid]) return cmIdUrl(bySet[info.lid]);
+    }
+    let c = null;
+    if(info.setId && info.lid){
+      c = { id: info.setId + '-' + info.lid, localId: info.lid, name: info.name };
+    } else {
+      c = await tcgResolveCard(info).catch(() => null);
+    }
+    if(!c){
+      // Setlijst niet beschikbaar: direct op nummer in de lijst (niet bij Classic Collection, daar verschillen de nummers)
+      const sid = await cmFindSetId(info), nk = tcgNumKey(info.number);
+      const bySet = sid && ids[sid];
+      if(!bySet || !nk || sid === '30th-c' || sid === 'cel25cc') return null;
+      const k = Object.keys(bySet).find(x => tcgNumKey(x) === nk);
+      return k ? cmIdUrl(bySet[k]) : null;
+    }
+    const sid = tcgCardSetId(c) || info.setId, lid = String(c.localId);
+    if(ids[sid] && ids[sid][lid]) return cmIdUrl(ids[sid][lid]);
+    // Nieuwere kaarten die nog niet in de lijst staan: productnummer van TCGdex zelf
+    const r = await fetch('https://api.tcgdex.net/v2/en/cards/' + encodeURIComponent(sid + '-' + lid));
+    const id = cmIdFromCard(r.ok ? await r.json() : null);
+    return id ? cmIdUrl(id) : null;
   }
   async function cmSlugUrl(info){
     const setId = await cmFindSetId(info);
@@ -1364,29 +1395,105 @@
     return tcgSetCards[setId];
   }
   function tcgNumKey(v){ return String(v || '').split('/')[0].trim().toLowerCase().replace(/^0+(?=.)/, ''); }
+  // ===== Classic Collection: gedrukte nummers (bv. Magikarp 203/193) en juiste foto's =====
+  // TCGdex nummert deze collecties zelf (001-030, CC001-CC025); op de kaart staat het originele nummer.
+  // [gedrukt nummer, foto (pokemontcg.io), hoofdset]
+  const TCG_CLASSIC = {
+    '30th-c-001': ['4/102', 'https://images.scrydex.com/pokemon/me55c-4/large', '30th'],
+    '30th-c-002': ['5/109', 'https://images.scrydex.com/pokemon/me55c-5/large', '30th'],
+    '30th-c-003': ['11/101', 'https://images.scrydex.com/pokemon/me55c-11/large', '30th'],
+    '30th-c-004': ['11/101', 'https://images.scrydex.com/pokemon/me55c-11g/large', '30th'],
+    '30th-c-005': ['18/132', 'https://images.scrydex.com/pokemon/me55c-18/large', '30th'],
+    '30th-c-006': ['19/109', 'https://images.scrydex.com/pokemon/me55c-19/large', '30th'],
+    '30th-c-007': ['25/111', 'https://images.scrydex.com/pokemon/me55c-25/large', '30th'],
+    '30th-c-008': ['33/181', 'https://images.scrydex.com/pokemon/me55c-33/large', '30th'],
+    '30th-c-009': ['41/122', 'https://images.scrydex.com/pokemon/me55c-41/large', '30th'],
+    '30th-c-010': ['43/146', 'https://images.scrydex.com/pokemon/me55c-43/large', '30th'],
+    '30th-c-011': ['47/127', 'https://images.scrydex.com/pokemon/me55c-47/large', '30th'],
+    '30th-c-012': ['50/185', 'https://images.scrydex.com/pokemon/me55c-50/large', '30th'],
+    '30th-c-013': ['57/111', 'https://images.scrydex.com/pokemon/me55c-57/large', '30th'],
+    '30th-c-014': ['58/102', 'https://images.scrydex.com/pokemon/me55c-58/large', '30th'],
+    '30th-c-015': ['69/132', 'https://images.scrydex.com/pokemon/me55c-69/large', '30th'],
+    '30th-c-016': ['85/124', 'https://images.scrydex.com/pokemon/me55c-85/large', '30th'],
+    '30th-c-017': ['89/149', 'https://images.scrydex.com/pokemon/me55c-89/large', '30th'],
+    '30th-c-018': ['94/102', 'https://images.scrydex.com/pokemon/me55c-94/large', '30th'],
+    '30th-c-019': ['99/102', 'https://images.scrydex.com/pokemon/me55c-99/large', '30th'],
+    '30th-c-020': ['100/102', 'https://images.scrydex.com/pokemon/me55c-100/large', '30th'],
+    '30th-c-021': ['101/101', 'https://images.scrydex.com/pokemon/me55c-101/large', '30th'],
+    '30th-c-022': ['106/106', 'https://images.scrydex.com/pokemon/me55c-106p/large', '30th'],
+    '30th-c-023': ['106/160', 'https://images.scrydex.com/pokemon/me55c-106m/large', '30th'],
+    '30th-c-024': ['106/105', 'https://images.scrydex.com/pokemon/me55c-106/large', '30th'],
+    '30th-c-025': ['108/115', 'https://images.scrydex.com/pokemon/me55c-108/large', '30th'],
+    '30th-c-026': ['114/264', 'https://images.scrydex.com/pokemon/me55c-114/large', '30th'],
+    '30th-c-027': ['123/172', 'https://images.scrydex.com/pokemon/me55c-123/large', '30th'],
+    '30th-c-028': ['138/202', 'https://images.scrydex.com/pokemon/me55c-138/large', '30th'],
+    '30th-c-029': ['149/147', 'https://images.scrydex.com/pokemon/me55c-149/large', '30th'],
+    '30th-c-030': ['203/193', 'https://images.scrydex.com/pokemon/me55c-203/large', '30th'],
+    'cel25cc-CC001': ['2/102', 'https://images.pokemontcg.io/cel25c/2_A_hires.png', 'cel25'],
+    'cel25cc-CC002': ['4/102', 'https://images.pokemontcg.io/cel25c/4_A_hires.png', 'cel25'],
+    'cel25cc-CC003': ['15/102', 'https://images.pokemontcg.io/cel25c/15_A_hires.png', 'cel25'],
+    'cel25cc-CC004': ['73/102', 'https://images.pokemontcg.io/cel25c/73_A_hires.png', 'cel25'],
+    'cel25cc-CC005': ['8/82', 'https://images.pokemontcg.io/cel25c/8_A_hires.png', 'cel25'],
+    'cel25cc-CC006': ['15/82', 'https://images.pokemontcg.io/cel25c/15_B_hires.png', 'cel25'],
+    'cel25cc-CC007': ['15/132', 'https://images.pokemontcg.io/cel25c/15_C_hires.png', 'cel25'],
+    'cel25cc-CC008': ['24', 'https://images.pokemontcg.io/cel25c/24_A_hires.png', 'cel25'],
+    'cel25cc-CC009': ['20/111', 'https://images.pokemontcg.io/cel25c/20_A_hires.png', 'cel25'],
+    'cel25cc-CC010': ['66/64', 'https://images.pokemontcg.io/cel25c/66_A_hires.png', 'cel25'],
+    'cel25cc-CC011': ['9/95', 'https://images.pokemontcg.io/cel25c/9_A_hires.png', 'cel25'],
+    'cel25cc-CC012': ['86/109', 'https://images.pokemontcg.io/cel25c/86_A_hires.png', 'cel25'],
+    'cel25cc-CC013': ['88/92', 'https://images.pokemontcg.io/cel25c/88_A_hires.png', 'cel25'],
+    'cel25cc-CC014': ['93/101', 'https://images.pokemontcg.io/cel25c/93_A_hires.png', 'cel25'],
+    'cel25cc-CC015': ['17/113', 'https://images.pokemontcg.io/cel25c/17_A_hires.png', 'cel25'],
+    'cel25cc-CC016': ['15/106', 'https://images.pokemontcg.io/cel25c/15_D_hires.png', 'cel25'],
+    'cel25cc-CC017': ['109/111', 'https://images.pokemontcg.io/cel25c/109_A_hires.png', 'cel25'],
+    'cel25cc-CC018': ['145/147', 'https://images.pokemontcg.io/cel25c/145_A_hires.png', 'cel25'],
+    'cel25cc-CC019': ['107/123', 'https://images.pokemontcg.io/cel25c/107_A_hires.png', 'cel25'],
+    'cel25cc-CC020': ['113/114', 'https://images.pokemontcg.io/cel25c/113_A_hires.png', 'cel25'],
+    'cel25cc-CC021': ['114/114', 'https://images.pokemontcg.io/cel25c/114_A_hires.png', 'cel25'],
+    'cel25cc-CC022': ['54/99', 'https://images.pokemontcg.io/cel25c/54_A_hires.png', 'cel25'],
+    'cel25cc-CC023': ['97/146', 'https://images.pokemontcg.io/cel25c/97_A_hires.png', 'cel25'],
+    'cel25cc-CC024': ['76/108', 'https://images.pokemontcg.io/cel25c/76_A_hires.png', 'cel25'],
+    'cel25cc-CC025': ['60/145', 'https://images.pokemontcg.io/cel25c/60_A_hires.png', 'cel25']
+  };
+  // Hoofdset -> collecties die erbij horen (zo vind je Magikarp 203 ook onder 30th Celebration)
+  const TCG_SUBSETS = { '30th': ['30th-c'], 'cel25': ['cel25cc'] };
+  function tcgCardSetId(c){
+    const id = String((c && c.id) || '');
+    const lid = String(c && c.localId != null ? c.localId : '');
+    if(lid && id.endsWith('-' + lid)) return id.slice(0, id.length - lid.length - 1);
+    let best = '';
+    Object.keys(tcgSetNameById).forEach(k => { if(id.startsWith(k + '-') && k.length > best.length) best = k; });
+    return best;
+  }
+  // Het nummer zoals het op de kaart gedrukt staat
+  function tcgPrinted(c){
+    const m = c && TCG_CLASSIC[c.id];
+    return m ? m[0] : String(c && c.localId != null ? c.localId : '');
+  }
+  function tcgNumMatches(c, nk){
+    if(!nk) return true;
+    return tcgNumKey(tcgPrinted(c)) === nk;
+  }
+  function tcgNameKey(v){ return String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, ''); }
+
   async function tcgQuery(name, number, setId){
+    const q = name.toLowerCase(), nk = tcgNumKey(number);
     if(setId){
-      const q = name.toLowerCase(), nk = tcgNumKey(number);
-      return (await tcgSetCardsFor(setId)).filter(c => (!q || (c.name || '').toLowerCase().includes(q)) && (!nk || tcgNumKey(c.localId) === nk));
+      let cards = (await tcgSetCardsFor(setId)).slice();
+      for(const sub of (TCG_SUBSETS[setId] || [])){
+        try{ cards = cards.concat(await tcgSetCardsFor(sub)); }catch(e){ console.error(e); }
+      }
+      return cards.filter(c => (!q || (c.name || '').toLowerCase().includes(q)) && tcgNumMatches(c, nk));
     }
-    let url = 'https://api.tcgdex.net/v2/en/cards?name=' + encodeURIComponent(name);
-    if(number) url += '&localId=' + encodeURIComponent(number);
-    const res = await fetch(url);
+    const res = await fetch('https://api.tcgdex.net/v2/en/cards?name=' + encodeURIComponent(name));
     if(!res.ok) throw new Error('fail');
     const found = (await res.json()) || [];
     await tcgEnsureSets();
-    return found.filter(c => !tcgIsDigitalCard(c));
+    return found.filter(c => !tcgIsDigitalCard(c) && tcgNumMatches(c, nk));
   }
   function tcgCardSetName(c){
-    const id = c.id || '';
-    const lid = String(c.localId == null ? '' : c.localId);
-    let sid = (lid && id.endsWith('-' + lid)) ? id.slice(0, id.length - lid.length - 1) : '';
-    if(!tcgSetNameById[sid]){
-      let best = '';
-      Object.keys(tcgSetNameById).forEach(k => { if(id.startsWith(k + '-') && k.length > best.length) best = k; });
-      if(best) sid = best;
-    }
-    return tcgSetNameById[sid] || sid || id;
+    const sid = tcgCardSetId(c);
+    return tcgSetNameById[sid] || sid || String((c && c.id) || '');
   }
   // Tekent het resultaat als raster van grote kaartafbeeldingen.
   function tcgRenderGrid(box, list, o){
@@ -1401,19 +1508,18 @@
         (c.image ? '<img src="' + escHtml(c.image) + '/low.png" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '') +
         '<span class="pick-tick">✓</span></div>' +
         '<div class="pick-name">' + escHtml(c.name) + '</div>' +
-        '<div class="pick-set">' + escHtml(tcgCardSetName(c)) + ' · ' + escHtml(c.localId) + '</div></div>').join('') + '</div></div>';
+        '<div class="pick-set">' + escHtml(tcgCardSetName(c)) + ' · ' + escHtml(tcgPrinted(c)) + '</div></div>').join('') + '</div></div>';
     box.querySelector('.pick-grid').addEventListener('click', e => {
       const el = e.target.closest('.pick-card'); if(!el) return;
       o.onPick(shown[parseInt(el.dataset.idx, 10)], el);
     });
-    let fb = 0;
     shown.forEach((c, i) => {
-      if(c.image || ++fb > 30) return;
-      fetchPokemonTcgIoImage(c.name, c.localId).then(fallback => {
+      if(c.image) return;
+      cardFallbackImage(c).then(fallback => {
         if(!fallback || !o.alive()) return;
         c._fallbackImage = fallback;
         const art = box.querySelector('.pick-card[data-idx="' + i + '"] .pick-art');
-        if(art){ const img = document.createElement('img'); img.src = fallback.small || fallback.large; img.alt = ''; img.loading = 'lazy'; art.insertBefore(img, art.querySelector('.pick-tick')); }
+        if(art){ const img = document.createElement('img'); img.onerror = () => img.remove(); img.src = fallback.small || fallback.large; img.alt = ''; img.loading = 'lazy'; art.insertBefore(img, art.querySelector('.pick-tick')); }
       });
     });
     return shown;
@@ -1448,17 +1554,27 @@
   });
   document.getElementById('csSet').addEventListener('change', csSearch);
 
-  async function fetchPokemonTcgIoImage(name, number){
-    try{
-      let q = 'name:"' + String(name || '').replace(/"/g, '') + '"';
-      if(number) q += ' number:' + number;
-      const url = 'https://api.pokemontcg.io/v2/cards?q=' + encodeURIComponent(q) + '&pageSize=1';
-      const res = await fetch(url);
-      if(!res.ok) return null;
-      const data = await res.json();
-      const card = data && data.data && data.data[0];
-      return (card && card.images) || null;
-    } catch(err){ console.error(err); return null; }
+  // Reservefoto als TCGdex er geen heeft. Alleen via set + nummer van exact deze kaart
+  // (card-images.json, gecontroleerd op kaartnaam), dus nooit een foto van een andere kaart.
+  let tcgImgMapPromise = null;
+  function tcgLoadImgMap(){
+    if(!tcgImgMapPromise) tcgImgMapPromise = fetch('card-images.json').then(r => r.ok ? r.json() : {}).catch(() => ({}));
+    return tcgImgMapPromise;
+  }
+  async function cardFallbackImage(c){
+    if(!c) return null;
+    const cl = TCG_CLASSIC[c.id];
+    if(cl) return { small: cl[1].replace(/\/large$/, '/small'), large: cl[1] };
+    const sid = tcgCardSetId(c);
+    if(!sid) return null;
+    const map = await tcgLoadImgMap();
+    const e = map[sid];
+    if(!e || !e.t) return null;
+    const lid = String(c.localId == null ? '' : c.localId);
+    if(!lid || (e.x && e.x.indexOf(lid) >= 0)) return null;
+    const n = (e.r && e.r[lid]) || lid.replace(/^([A-Za-z]*)0+(?=\d)/, '$1');
+    const large = e.t.replace('{n}', n);
+    return { small: large.replace(/_hires\.png$/, '.png').replace(/\/large$/, '/small'), large };
   }
 
   async function csPickCard(c){
@@ -1474,14 +1590,15 @@
         if(imgBase){
           targetRow.dataset.image = imgBase + '/high.png';
         } else {
-          const fallback = c._fallbackImage || await fetchPokemonTcgIoImage(c.name, c.localId);
+          const fallback = c._fallbackImage || await cardFallbackImage(c);
           if(fallback) targetRow.dataset.image = fallback.large || fallback.small;
         }
       } catch(err){ console.error(err); }
       return;
     }
     document.getElementById('fName').value = c.name;
-    document.getElementById('fNumber').value = c.localId || '';
+    document.getElementById('fNumber').value = tcgPrinted(c);
+    selectedTcg = { set: tcgCardSetId(c), lid: String(c.localId == null ? '' : c.localId) };
     try{
       const res = await fetch('https://api.tcgdex.net/v2/en/cards/' + c.id);
       const full = res.ok ? await res.json() : null;
@@ -1492,7 +1609,7 @@
       if(imgBase){
         selectedImage = imgBase + '/high.png';
       } else {
-        const fallback = c._fallbackImage || await fetchPokemonTcgIoImage(c.name, c.localId);
+        const fallback = c._fallbackImage || await cardFallbackImage(c);
         if(fallback) selectedImage = fallback.large || fallback.small;
       }
     } catch(err){ console.error(err); }
@@ -1538,12 +1655,14 @@
     csPickCard(c);
     fHideResults();
     const chip = document.getElementById('fPicked');
-    const img = c.image ? '<img src="' + escHtml(c.image) + '/low.png" alt="" onerror="this.style.visibility=\'hidden\'">' : '';
-    chip.innerHTML = img + '<div><div class="pc-name">' + escHtml(c.name) + '</div><div class="pc-sub">' + escHtml(tcgCardSetName(c)) + ' · ' + escHtml(c.localId) + ' — gekozen</div>' + cmLinkHTML({ name: c.name, number: c.localId, setId: (function(){ const n = tcgCardSetName(c); const h = tcgSets.find(z => z.name === n); return h ? h.id : ''; })() }, 'cm-inline', 'Cardmarket-prijs bekijken') + '</div>';
+    const fbImg = TCG_CLASSIC[c.id] ? TCG_CLASSIC[c.id][1].replace(/\/large$/, '/small') : (c._fallbackImage ? (c._fallbackImage.small || c._fallbackImage.large) : '');
+    const img = (c.image || fbImg) ? '<img src="' + escHtml(c.image ? c.image + '/low.png' : fbImg) + '" alt="" onerror="this.style.visibility=\'hidden\'">' : '';
+    chip.innerHTML = img + '<div><div class="pc-name">' + escHtml(c.name) + '</div><div class="pc-sub">' + escHtml(tcgCardSetName(c)) + ' · ' + escHtml(tcgPrinted(c)) + ' — gekozen</div>' + cmLinkHTML({ name: c.name, number: tcgPrinted(c), setId: tcgCardSetId(c), lid: String(c.localId) }, 'cm-inline', 'Cardmarket-prijs bekijken') + '</div>';
     chip.classList.remove('hidden');
   }
   function addSearchDebounced(){ clearTimeout(fDebounce); fDebounce = setTimeout(addSearch, 300); }
   document.getElementById('fName').addEventListener('input', addSearchDebounced);
+  document.getElementById('fName').addEventListener('input', () => { selectedTcg = null; });
   document.getElementById('fNumber').addEventListener('input', addSearchDebounced);
   document.getElementById('fSetSel').addEventListener('change', () => {
     const sel = document.getElementById('fSetSel');
@@ -1605,8 +1724,8 @@
             <img class="cs-thumb" src="${s.image || ''}" alt="" onerror="this.style.visibility='hidden'">
             <div style="flex:1; min-width:0;">
               <div class="cs-name">${s.c.name}</div>
-              <div class="cs-set">#${s.c.localId || ''} · ${s.c.id}</div>
-              ${cmLinkHTML({ name: s.c.name, number: s.c.localId, setId: (function(){ const n = tcgCardSetName(s.c); const h = tcgSets.find(z => z.name === n); return h ? h.id : ''; })() }, 'cm-inline', 'Cardmarket-prijs bekijken')}
+              <div class="cs-set">#${escHtml(tcgPrinted(s.c))} · ${escHtml(tcgCardSetName(s.c))}</div>
+              ${cmLinkHTML({ name: s.c.name, number: tcgPrinted(s.c), setId: tcgCardSetId(s.c), lid: String(s.c.localId) }, 'cm-inline', 'Cardmarket-prijs bekijken')}
             </div>
             <button type="button" class="btn-ghost bk-remove" aria-label="Verwijder ${s.c.name}">Verwijderen</button>
           </div>
@@ -1668,7 +1787,7 @@
       if(imgBase){
         entry.image = imgBase + '/high.png';
       } else {
-        const fallback = c._fallbackImage || await fetchPokemonTcgIoImage(c.name, c.localId);
+        const fallback = c._fallbackImage || await cardFallbackImage(c);
         if(fallback) entry.image = fallback.large || fallback.small;
       }
       entry.setName = (full && full.set && full.set.name) || '';
@@ -1736,7 +1855,8 @@
         const newId = genId();
         const item = {
           id: newId, barcode: newId,
-          name: s.c.name, cardNumber: s.c.localId || '', set: s.setName || '',
+          name: s.c.name, cardNumber: tcgPrinted(s.c), set: s.setName || tcgCardSetName(s.c) || '',
+          tcgSet: tcgCardSetId(s.c) || null, tcgLid: s.c.localId != null ? String(s.c.localId) : null,
           itemType: 'Raw', condition: s.condition, gradingCompany: null, grade: null,
           sellingPrice: sellingPrice, purchasePrice: purchasePrice,
           image: s.image || null,
@@ -1761,6 +1881,8 @@
     document.getElementById('addForm').reset();
     document.getElementById('addOwnerName').textContent = activeUserName();
     selectedImage = null;
+    selectedTcg = null;
+    document.getElementById('fSet').value = '';   // verborgen veld wordt door reset() niet leeggemaakt
     document.getElementById('fSetSel').value = ''; syncAddSetSelect(); fHideResults(); fHidePicked(); tcgEnsureSets();
     setActiveSeg('typeSeg','Raw'); toggleCondFields('Raw');
     setActiveSeg('condRawSeg','NM'); setActiveSeg('acqSeg','Cash');
@@ -1777,6 +1899,7 @@
     document.getElementById('qtyField').classList.add('hidden');
     document.getElementById('addOwnerName').textContent = activeUserName();
     selectedImage = item.image || null;
+    selectedTcg = undefined;
     document.getElementById('fName').value = item.name || '';
     document.getElementById('fNumber').value = item.cardNumber || '';
     document.getElementById('fSet').value = item.set || '';
@@ -1813,6 +1936,8 @@
       purchasePrice: purchaseRaw === '' ? null : parseFloat(purchaseRaw),
     };
     if(selectedImage) baseFields.image = selectedImage;
+    if(selectedTcg === null){ baseFields.tcgSet = null; baseFields.tcgLid = null; }
+    else if(selectedTcg && selectedTcg.set){ baseFields.tcgSet = selectedTcg.set; baseFields.tcgLid = selectedTcg.lid; }
 
     if(editingItemId){
       db.ref('items/' + editingItemId).update(baseFields).catch(err => console.error('Opslaan mislukt:', err));
@@ -1838,7 +1963,7 @@
   function openDetailModal(item){
     currentDetailItem = item;
     { const l = document.getElementById('detailCmLink'); l.href = cardmarketUrl(item.name);
-      l.setAttribute('data-cm', JSON.stringify({ name: item.name, setName: item.set || '', number: item.cardNumber || '' }));
+      l.setAttribute('data-cm', JSON.stringify({ name: item.name, setName: item.set || '', number: item.cardNumber || '', setId: item.tcgSet || '', lid: item.tcgLid || '' }));
       l.onclick = ev => cmOpen(ev, l); }
     document.getElementById('detailName').textContent = item.name;
     document.getElementById('detailSub').textContent = [item.set, item.cardNumber].filter(Boolean).join(' · ') || item.itemType;
@@ -2144,22 +2269,26 @@
     async function tiPick(c){
       nameInp.value = c.name;
       tiHide();
-      pickedEl.textContent = '✓ ' + tcgCardSetName(c) + ' · ' + c.localId;
+      pickedEl.textContent = '✓ ' + tcgCardSetName(c) + ' · ' + tcgPrinted(c);
       pickedEl.classList.remove('hidden');
       delete div.dataset.image;
+      div.dataset.setName = tcgCardSetName(c);
+      div.dataset.number = tcgPrinted(c);
+      div.dataset.tcgSet = tcgCardSetId(c);
+      div.dataset.tcgLid = String(c.localId == null ? '' : c.localId);
       try{
         const res = await fetch('https://api.tcgdex.net/v2/en/cards/' + c.id);
         const full = res.ok ? await res.json() : null;
         const imgBase = (full && full.image) || c.image;
         if(imgBase){ div.dataset.image = imgBase + '/high.png'; }
         else {
-          const fallback = c._fallbackImage || await fetchPokemonTcgIoImage(c.name, c.localId);
+          const fallback = c._fallbackImage || await cardFallbackImage(c);
           if(fallback) div.dataset.image = fallback.large || fallback.small;
         }
       } catch(err){ console.error(err); }
     }
     function tiDebounced(){ clearTimeout(tiTimer); tiTimer = setTimeout(tiSearch, 300); }
-    nameInp.addEventListener('input', () => { delete div.dataset.image; pickedEl.classList.add('hidden'); tiDebounced(); });
+    nameInp.addEventListener('input', () => { ['image','setName','number','tcgSet','tcgLid'].forEach(k => delete div.dataset[k]); pickedEl.classList.add('hidden'); tiDebounced(); });
     numInp.addEventListener('input', tiDebounced);
     setSel.addEventListener('change', tiSearch);
     if(tcgSets.length) tcgFillSetSelects(); else tcgEnsureSets();
@@ -2196,7 +2325,9 @@
         name: row.querySelector('.ti-name').value.trim() || 'Ruilkaart',
         condition: row.querySelector('.ti-cond').value,
         marketPrice: market, pct, tradeValue: +(market*pct/100).toFixed(2),
-        image: row.dataset.image || null
+        image: row.dataset.image || null,
+        setName: row.dataset.setName || '', number: row.dataset.number || '',
+        tcgSet: row.dataset.tcgSet || null, tcgLid: row.dataset.tcgLid || null
       };
     }).filter(r => r.tradeValue > 0);
     const inTotal = inRows.reduce((s,r)=>s+r.tradeValue,0);
@@ -2210,7 +2341,7 @@
       const share = inTotal>0 ? r.tradeValue/inTotal : 0;
       const allocatedCost = +(netCostBasis*share).toFixed(2);
       const id = genId();
-      const newItem = { id, name:r.name, cardNumber:'', set:'', barcode:id, itemType:'Raw', condition:r.condition,
+      const newItem = { id, name:r.name, cardNumber:r.number || '', set:r.setName || '', tcgSet:r.tcgSet, tcgLid:r.tcgLid, barcode:id, itemType:'Raw', condition:r.condition,
         sellingPrice:r.marketPrice, purchasePrice:allocatedCost, tradeValue:r.tradeValue, acquisitionMethod:'Trade',
         acquisitionDetails:{ type:'trade', givenSummary:outNames, marketPriceAtTrade:r.marketPrice, percentage:r.pct, tradeValue:r.tradeValue, cashAdjust: cash?-cash*share:0 },
         owner:activeInitial, status:'voorraad', createdAt:Date.now() };
@@ -2233,7 +2364,52 @@
       const val = snap.val();
       itemsData = val ? Object.values(val) : [];
       renderGrid(); renderDashboard();
+      scheduleItemRepair();
     }, err => { console.error('Items laadfout:', err); showToast(describeDbError(err, 'Laden'), 'error'); });
+  }
+
+  // ===== Eenmalige opschoning van bestaande kaarten =====
+  // Vult het kaart-id aan (voor Cardmarket), zet Classic Collection-nummers juist (bv. 203/193),
+  // vult ontbrekende foto's aan en vervangt reservefoto's door de foto van exact die kaart.
+  let itemRepairStarted = false;
+  function scheduleItemRepair(){
+    if(itemRepairStarted) return;
+    try{ if(localStorage.getItem('mewthy_repair_v1')) return; }catch(e){}
+    itemRepairStarted = true;
+    setTimeout(() => { repairItems().catch(err => { console.error(err); itemRepairStarted = false; }); }, 1500);
+  }
+  async function repairItems(){
+    await tcgEnsureSets();
+    if(!tcgSets.length){ itemRepairStarted = false; return; }
+    let changed = 0;
+    for(const it of itemsData.slice()){
+      if(!it || !it.id || it.itemType === 'Sealed' || it.itemType === 'Other' || !it.name) continue;
+      const hasTcgImg = /assets\.tcgdex\.net/.test(it.image || '');
+      const needs = !it.tcgSet || !hasTcgImg || /Classic Collection/i.test(it.set || '');
+      if(!needs) continue;
+      let c = null;
+      try{
+        if(it.tcgSet && it.tcgLid){
+          const list = await tcgSetCardsFor(it.tcgSet);
+          c = list.find(x => String(x.localId) === String(it.tcgLid)) || null;
+        } else if(it.set && it.cardNumber){
+          c = await tcgResolveCard({ name: it.name, setName: it.set, number: it.cardNumber });
+        }
+      }catch(e){ c = null; }
+      if(!c || tcgNameKey(c.name) !== tcgNameKey(it.name)) continue;  // alleen als de naam klopt
+      const upd = {};
+      if(!it.tcgSet){ upd.tcgSet = tcgCardSetId(c); upd.tcgLid = String(c.localId); }
+      const printed = tcgPrinted(c);
+      if(TCG_CLASSIC[c.id] && it.cardNumber !== printed) upd.cardNumber = printed;
+      if(!hasTcgImg){
+        let want = c.image ? c.image + '/high.png' : null;
+        if(!want){ const fb = await cardFallbackImage(c); want = fb ? fb.large : null; }
+        if(want && want !== it.image) upd.image = want;
+      }
+      if(Object.keys(upd).length){ changed++; await db.ref('items/' + it.id).update(upd).catch(() => {}); }
+    }
+    try{ localStorage.setItem('mewthy_repair_v1', String(Date.now())); }catch(e){}
+    if(changed) console.log('Kaarten bijgewerkt:', changed);
   }
   function loadTransactions(){
     db.ref('transactions').on('value', snap => {
