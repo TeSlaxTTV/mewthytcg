@@ -1188,14 +1188,52 @@
     cmSetInfo[setId] = d;
     return d;
   }
+  // Cardmarket-productnummers per kaart (uit de open TCGdex-database; bestand cardmarket-ids.json in de site)
+  let cmIdsPromise = null;
+  function cmLoadIds(){
+    if(!cmIdsPromise) cmIdsPromise = fetch('cardmarket-ids.json').then(r => r.ok ? r.json() : {}).catch(() => ({}));
+    return cmIdsPromise;
+  }
+  function cmIdUrl(id){
+    return 'https://www.cardmarket.com/en/Pokemon/Products?idProduct=' + id + '&sellerCountry=' + CM_SELLER_COUNTRIES + '&language=1';
+  }
   async function cmProductUrl(info){
+    const url = await cmProductIdUrl(info).catch(() => null);
+    return url || cmSlugUrl(info);
+  }
+  async function cmFindSetId(info){
+    if(info.setId) return info.setId;
     await tcgEnsureSets();
-    let setId = info.setId;
-    if(!setId && info.setName){
-      const want = info.setName.trim().toLowerCase();
-      const hit = tcgSets.find(z => z.name.trim().toLowerCase() === want);
-      if(hit) setId = hit.id;
+    if(!info.setName) return '';
+    const want = info.setName.trim().toLowerCase();
+    const hit = tcgSets.find(z => z.name.trim().toLowerCase() === want);
+    return hit ? hit.id : '';
+  }
+  async function cmProductIdUrl(info){
+    const setId = await cmFindSetId(info);
+    const num = tcgNumKey(info.number);
+    if(!setId || !num) return null;
+    const ids = await cmLoadIds();
+    const bySet = ids[setId];
+    if(bySet){
+      if(bySet[info.number]) return cmIdUrl(bySet[info.number]);
+      const k = Object.keys(bySet).find(x => tcgNumKey(x) === num);
+      if(k) return cmIdUrl(bySet[k]);
     }
+    // Nieuwere kaarten: misschien geeft TCGdex het productnummer zelf mee
+    const d = await cmSetDetail(setId);
+    const card = (d.cards || []).find(c => tcgNumKey(c.localId) === num);
+    if(card){
+      const r = await fetch('https://api.tcgdex.net/v2/en/cards/' + card.id);
+      const full = r.ok ? await r.json() : null;
+      let id = full && full.thirdParty && full.thirdParty.cardmarket;
+      if(!id && full && Array.isArray(full.variants)) for(const v of full.variants){ if(v && v.thirdParty && v.thirdParty.cardmarket){ id = v.thirdParty.cardmarket; break; } }
+      if(id) return cmIdUrl(id);
+    }
+    return null;
+  }
+  async function cmSlugUrl(info){
+    const setId = await cmFindSetId(info);
     if(!setId || !info.name) return null;
     const d = await cmSetDetail(setId);
     const subset = CM_SUBSET_BY_NAME.find(x => x[0].test(d.name || ''));
@@ -1218,7 +1256,7 @@
       version = '-V' + (idx + 1);
       // Cardmarket: bij oudere series (t/m Sword & Shield) hebben kaarten met meerdere versies geen setcode+nummer
       // (bv. Fusion-Strike/Greedent-V-V3), bij Scarlet & Violet en nieuwer wel (bv. 30th-Celebration/Mew-ex-V2-30C152).
-      if(isOld) suffix = '';
+      if(serieId === 'swsh') suffix = '';  // alleen Sword & Shield laat de code weg bij meerdere versies
     }
     return 'https://www.cardmarket.com/en/Pokemon/Products/Singles/' + (ov.slug || cmSlug(d.name || info.setName)) + '/' +
       cmSlug(info.name) + version + suffix +
