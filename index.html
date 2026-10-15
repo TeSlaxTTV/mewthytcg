@@ -1170,6 +1170,14 @@
   const CM_SET_OVERRIDES = {
     svp: { slug: 'SV-Black-Star-Promos', code: 'SVP' }
   };
+  // Subsets die Cardmarket onder de hoofdset zet (bv. Crown-Zenith/Lumineon-V-CRZGG39)
+  const CM_SUBSET_BY_NAME = [
+    [/^Crown Zenith.*Galarian Gallery$/i, { slug: 'Crown-Zenith', code: 'CRZ' }],
+    [/^Brilliant Stars.*Trainer Gallery$/i, { slug: 'Brilliant-Stars', code: 'BRS' }],
+    [/^Astral Radiance.*Trainer Gallery$/i, { slug: 'Astral-Radiance', code: 'ASR' }],
+    [/^Lost Origin.*Trainer Gallery$/i, { slug: 'Lost-Origin', code: 'LOR' }],
+    [/^Silver Tempest.*Trainer Gallery$/i, { slug: 'Silver-Tempest', code: 'SIT' }]
+  ];
   const cmSetInfo = {};
   async function cmSetDetail(setId){
     if(cmSetInfo[setId]) return cmSetInfo[setId];
@@ -1190,7 +1198,8 @@
     }
     if(!setId || !info.name) return null;
     const d = await cmSetDetail(setId);
-    const ov = CM_SET_OVERRIDES[setId] || (/^SVP\b.*Black Star Promos$/i.test(d.name || '') ? CM_SET_OVERRIDES.svp : null) || {};
+    const subset = CM_SUBSET_BY_NAME.find(x => x[0].test(d.name || ''));
+    const ov = CM_SET_OVERRIDES[setId] || (/^SVP\b.*Black Star Promos$/i.test(d.name || '') ? CM_SET_OVERRIDES.svp : null) || (subset && subset[1]) || {};
     const code = ov.code || (d.abbreviation && (d.abbreviation.official || d.abbreviation.normal)) || d.tcgOnline;
     const num = tcgNumKey(info.number);
     if(!code || !num) return null;
