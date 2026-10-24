@@ -315,6 +315,14 @@
   .status-pill{ display:inline-block; font-size:.74rem; font-weight:700; padding:2px 8px; border-radius:999px; margin-top:3px; }
   .status-pill.stock{ background:var(--violet-soft); color:var(--violet-deep); }
   .status-pill.sold{ background:var(--mint-soft); color:var(--mint); }
+  .buy-actions{ display:flex; justify-content:flex-end; padding:0 18px 10px; }
+  .buy-edit-all{ display:flex; gap:10px; align-items:flex-end; background:var(--surface-raised); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:14px; }
+  .buy-edit-all .field{ flex:1; margin-bottom:0; }
+  .buy-edit-all .btn-ghost{ min-height:48px; }
+  .buy-edit-total{ margin-right:auto; align-self:center; font-weight:600; color:var(--muted); }
+  .buy-edit-total strong{ font-family:var(--font-display); color:var(--text); font-size:1.15rem; margin-left:6px; }
+  .bk-item.is-deleted{ opacity:.45; }
+  .bk-item.is-deleted .field-row-3{ display:none; }
   .ev-hist{ background:none; border:none; color:var(--violet-deep); font-weight:700; font-size:.88rem; cursor:pointer; padding:4px 0; margin-top:4px; }
   @media (max-width:700px){
     .hist-stats{ grid-template-columns:1fr 1fr; gap:10px; }
@@ -322,6 +330,8 @@
     .fair-stats{ grid-template-columns:1fr 1fr; padding:0 14px 12px; }
     .fair-list{ margin:0 10px 12px; }
     .buy-row{ padding:10px 12px; }
+    #buyEditOverlay .modal-actions{ flex-wrap:wrap; }
+    .buy-edit-total{ flex:1 0 100%; margin:0 0 2px; }
   }
   .ti-results{ margin-bottom:10px; }
   .ti-results .pick-wrap{ max-height:38vh; }
@@ -808,6 +818,24 @@
     <div class="modal-actions">
       <button type="button" class="btn-ghost" id="bkCloseBtn">Annuleren</button>
       <button type="button" class="btn-primary" id="bkSubmitBtn" disabled>Voeg 0 kaarten toe</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== AANKOOP AANPASSEN ===== -->
+<div class="modal-overlay hidden" id="buyEditOverlay">
+  <div class="modal wide">
+    <h2>Aankoop aanpassen</h2>
+    <div class="modal-sub" id="buyEditSub">—</div>
+    <div class="buy-edit-all">
+      <div class="field"><label>Aankoop % voor alle kaarten</label><input type="number" inputmode="numeric" min="1" max="100" id="buyEditPct" placeholder="bv. 80"></div>
+      <button type="button" class="btn-ghost" id="buyEditPctBtn">Toepassen</button>
+    </div>
+    <div id="buyEditList"></div>
+    <div class="modal-actions">
+      <div class="buy-edit-total">Totaal betaald <strong id="buyEditTotal">€0,00</strong></div>
+      <button type="button" class="btn-ghost" id="buyEditCancel">Annuleren</button>
+      <button type="button" class="btn-primary" id="buyEditSave">Opslaan</button>
     </div>
   </div>
 </div>
@@ -2426,7 +2454,7 @@
   });
 
   // ===== Historiek =====
-  let histTab = 'beurs', histWho = '', histDayLimit = 30, histBuyLimit = 30, histOpenEvent = null;
+  let histTab = 'beurs', histWho = '', histDayLimit = 30, histBuyLimit = 30, histOpenEvent = null, histBuyGroups = [];
   function histUsers(){ return [...document.querySelectorAll('#userSelectMenu button[data-name]')].map(b => ({ name: b.dataset.name, initial: b.dataset.initial })); }
   function ymd(ts){ const d = new Date(ts); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   function fmtDay(v){ const p = String(v).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('nl-BE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }); }
@@ -2548,11 +2576,14 @@
         return '<details class="fair-card"><summary><div class="event-date-badge"><div class="event-day">' + d.getDate() + '</div><div class="event-month">' + d.toLocaleDateString('nl-BE', { month: 'short' }).toUpperCase() + '</div></div>' +
           '<div class="fair-main"><div class="event-name">' + title + '</div><div class="event-meta">' + fmtDay(ymd(g.first)) + ' · ' + d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' }) + ' · ' + escHtml(nameOf(g.owner)) + ' · ' + g.items.length + (g.items.length === 1 ? ' kaart' : ' kaarten') + (sold ? ' · ' + sold + ' verkocht' : '') + '</div></div>' +
           '<div><div class="fair-total">' + eur(paid(g.items)) + '</div><div class="fair-sub">' + (cm ? 'CM ' + eur(cm) : 'betaald') + '</div></div></summary>' +
+          '<div class="buy-actions"><button type="button" class="btn-ghost buy-edit" data-g="' + groups.indexOf(g) + '">Aanpassen</button></div>' +
           '<div class="history-panel fair-list">' + rows + '</div></details>';
       }).join('') +
       (groups.length > shown.length ? '<button type="button" class="btn-ghost hist-more" id="histMoreBuys">Meer tonen (' + (groups.length - shown.length) + ')</button>' : '');
     const more = document.getElementById('histMoreBuys');
     if(more) more.addEventListener('click', () => { histBuyLimit += 30; renderHistory(); });
+    histBuyGroups = groups;
+    box.querySelectorAll('.buy-edit').forEach(btn => btn.addEventListener('click', () => openBuyEdit(histBuyGroups[+btn.dataset.g])));
   }
 
   function renderHistory(){
@@ -2581,6 +2612,107 @@
   }
   document.querySelectorAll('#histTabs .seg-btn').forEach(b => b.addEventListener('click', () => { histTab = b.dataset.tab; renderHistory(); }));
   document.getElementById('dashAllHistBtn').addEventListener('click', () => openHistory('verkopen'));
+
+  // ===== Aankoop aanpassen (vanuit Historiek) =====
+  let buyEdit = null;
+  const BUY_CONDS = ['NM','LP','MP','HP','DMG'];
+  function buyRound(cm, pct){ return Math.round((parseFloat(cm) || 0) * (parseFloat(pct) || 0)) / 100; }
+  function openBuyEdit(g){
+    if(!g) return;
+    const users = histUsers();
+    buyEdit = {
+      group: g,
+      rows: g.items.map(it => {
+        const ad = it.acquisitionDetails || {};
+        return { id: it.id, orig: it, name: it.name, sub: [it.set, it.cardNumber].filter(Boolean).join(' · '), image: it.image || '', sold: it.status === 'verkocht',
+          type: it.itemType, cond: it.condition || 'NM',
+          cm: ad.marketPrice != null ? String(ad.marketPrice) : '', pct: ad.percentage != null ? String(ad.percentage) : '',
+          paid: it.purchasePrice != null ? String(it.purchasePrice) : '', sell: it.sellingPrice != null ? String(it.sellingPrice) : '', del: false };
+      })
+    };
+    const d = new Date(g.first);
+    document.getElementById('buyEditSub').textContent = d.toLocaleDateString('nl-BE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' +
+      ((users.find(u => u.initial === g.owner) || {}).name || '') + ' · ' + g.items.length + (g.items.length === 1 ? ' kaart' : ' kaarten');
+    const pcts = [...new Set(buyEdit.rows.map(r => r.pct).filter(Boolean))];
+    document.getElementById('buyEditPct').value = pcts.length === 1 ? pcts[0] : '';
+    renderBuyEdit();
+    document.getElementById('buyEditOverlay').classList.remove('hidden');
+  }
+  function buyEditTotal(){
+    const t = buyEdit.rows.filter(r => !r.del).reduce((s, r) => s + (parseFloat(r.paid) || 0), 0);
+    document.getElementById('buyEditTotal').textContent = eur(t);
+  }
+  function renderBuyEdit(){
+    const list = document.getElementById('buyEditList');
+    list.innerHTML = buyEdit.rows.map((r, i) => `
+      <div class="bk-item${r.del ? ' is-deleted' : ''}" data-i="${i}">
+        <div class="bk-item-head">
+          ${r.image ? `<img class="cs-thumb" src="${escHtml(r.image)}" alt="" onerror="this.style.visibility='hidden'">` : '<div class="cs-thumb"></div>'}
+          <div style="flex:1; min-width:0;">
+            <div class="cs-name">${escHtml(r.name)}</div>
+            <div class="cs-set">${escHtml(r.sub)}</div>
+            <span class="status-pill ${r.sold ? 'sold' : 'stock'}">${r.sold ? 'Verkocht' : 'Op voorraad'}</span>
+          </div>
+          ${r.sold ? '' : `<button type="button" class="btn-ghost bk-remove be-del">${r.del ? 'Terugzetten' : 'Verwijderen'}</button>`}
+        </div>
+        <div class="field-row-3">
+          <div class="field"><label>CM-prijs (€)</label><input type="number" inputmode="decimal" min="0" step="0.01" class="be-cm" value="${escHtml(r.cm)}"></div>
+          <div class="field"><label>Aankoop %</label><input type="number" inputmode="numeric" min="1" max="100" class="be-pct" value="${escHtml(r.pct)}"></div>
+          <div class="field"><label>Betaald (€)</label><input type="number" inputmode="decimal" min="0" step="0.01" class="be-paid" value="${escHtml(r.paid)}"></div>
+        </div>
+        <div class="field-row-3">
+          ${r.type === 'Raw' || !r.type ? `<div class="field"><label>Conditie</label><select class="be-cond">${BUY_CONDS.map(c => `<option value="${c}" ${c === r.cond ? 'selected' : ''}>${c}</option>`).join('')}</select></div>` : '<div class="field"></div>'}
+          <div class="field"><label>${r.sold ? 'Verkocht voor (€)' : 'Verkoopprijs (€)'}</label><input type="number" inputmode="decimal" min="0" step="0.01" class="be-sell" value="${escHtml(r.sell)}"></div>
+          <div class="field"></div>
+        </div>
+      </div>`).join('');
+    list.querySelectorAll('.bk-item').forEach(el => {
+      const r = buyEdit.rows[+el.dataset.i];
+      const paidInp = el.querySelector('.be-paid');
+      const recalc = () => { if(r.cm !== '' && r.pct !== ''){ r.paid = String(buyRound(r.cm, r.pct)); paidInp.value = r.paid; } buyEditTotal(); };
+      el.querySelector('.be-cm').addEventListener('input', e => { r.cm = e.target.value; recalc(); });
+      el.querySelector('.be-pct').addEventListener('input', e => { r.pct = e.target.value; recalc(); });
+      paidInp.addEventListener('input', e => { r.paid = e.target.value; buyEditTotal(); });
+      el.querySelector('.be-sell').addEventListener('input', e => { r.sell = e.target.value; });
+      const cond = el.querySelector('.be-cond'); if(cond) cond.addEventListener('change', e => { r.cond = e.target.value; });
+      const del = el.querySelector('.be-del'); if(del) del.addEventListener('click', () => { r.del = !r.del; renderBuyEdit(); });
+    });
+    buyEditTotal();
+  }
+  document.getElementById('buyEditPctBtn').addEventListener('click', () => {
+    const pct = document.getElementById('buyEditPct').value;
+    if(!pct) return;
+    buyEdit.rows.forEach(r => { r.pct = pct; if(r.cm !== '') r.paid = String(buyRound(r.cm, pct)); });
+    renderBuyEdit();
+  });
+  document.getElementById('buyEditCancel').addEventListener('click', () => { document.getElementById('buyEditOverlay').classList.add('hidden'); buyEdit = null; });
+  document.getElementById('buyEditSave').addEventListener('click', () => {
+    if(!buyEdit) return;
+    const dels = buyEdit.rows.filter(r => r.del);
+    if(dels.length && !confirm(dels.length + (dels.length === 1 ? ' kaart' : ' kaarten') + ' definitief verwijderen uit je inventaris?')) return;
+    const g = buyEdit.group;
+    const batchId = g.batchId || ('batch_' + g.first);   // oudere aankopen krijgen nu ook een vaste groep
+    const num = v => (v === '' || v == null || isNaN(parseFloat(v))) ? null : parseFloat(v);
+    let changed = 0;
+    buyEdit.rows.forEach(r => {
+      if(r.del){ db.ref('items/' + r.id).remove(); changed++; return; }
+      const it = r.orig, upd = {};
+      const paid = num(r.paid), sell = num(r.sell), cm = num(r.cm), pct = num(r.pct);
+      if(paid !== (it.purchasePrice != null ? +it.purchasePrice : null)) upd.purchasePrice = paid;
+      if(sell != null && sell !== +it.sellingPrice) upd.sellingPrice = sell;
+      if((r.type === 'Raw' || !r.type) && r.cond !== (it.condition || 'NM')) upd.condition = r.cond;
+      const ad = it.acquisitionDetails || null;
+      const oldCm = ad && ad.marketPrice != null ? +ad.marketPrice : null, oldPct = ad && ad.percentage != null ? +ad.percentage : null;
+      if(cm !== oldCm || pct !== oldPct){
+        upd.acquisitionDetails = Object.assign({}, ad || { type: 'purchase' }, { marketPrice: cm, percentage: pct });
+      }
+      if(it.batchId !== batchId) upd.batchId = batchId;
+      if(Object.keys(upd).length){ db.ref('items/' + r.id).update(upd); changed++; }
+    });
+    document.getElementById('buyEditOverlay').classList.add('hidden');
+    buyEdit = null;
+    if(changed) showToast('Aankoop bijgewerkt', 'success', 2500);
+  });
 
   // ===== Load =====
   function loadItems(){
