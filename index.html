@@ -894,6 +894,19 @@
   </div>
 </div>
 
+<!-- ===== DAGRAPPORT ===== -->
+<div class="modal-overlay hidden" id="reportOverlay">
+  <div class="modal wide">
+    <h2>Dagrapport</h2>
+    <div class="modal-sub" id="reportSub">Gekopieerd. Plak dit in de chat met Claude.</div>
+    <textarea id="reportText" readonly style="width:100%; min-height:50vh; font-family:ui-monospace,Menlo,monospace; font-size:.8rem; border:1.5px solid var(--line-strong); border-radius:12px; padding:10px;"></textarea>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="reportClose">Sluiten</button>
+      <button type="button" class="btn-primary" id="reportCopy">Kopieer</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== KASBEWEGING ===== -->
 <div class="modal-overlay hidden" id="cashOverlay">
   <div class="modal">
@@ -2768,6 +2781,7 @@
           moves.map(c => '<div class="kassa-row"><span>' + escHtml(c.note || 'Kasbeweging') + '</span><span><span class="' + (c.amount >= 0 ? 'pos' : 'neg') + '">' + (c.amount >= 0 ? '+' : '-') + eur(Math.abs(c.amount)) + '</span><button type="button" class="cash-del" data-id="' + escHtml(c.id) + '" title="Verwijderen">×</button></span></div>').join('') +
           '<div class="kassa-row kassa-total"><span>Moet in de kassa zitten</span><span>' + eurS(kassa) + '</span></div>' +
           '<button type="button" class="btn-ghost kassa-add" data-date="' + escHtml(ev.date) + '">+ Kasbeweging (lening, terugbetaling…)</button>' +
+          '<button type="button" class="btn-ghost kassa-add kassa-report" data-date="' + escHtml(ev.date) + '" data-name="' + escHtml(ev.name) + '">Dagrapport kopiëren</button>' +
           (otherSales ? '<div class="kassa-note">Niet in de kassa: ' + eur(otherSales) + ' via ' + escHtml(Object.keys(otherLabel).join(', ')) + '.</div>' : '') +
           (notBought ? '<div class="kassa-note">' + notBought + (notBought === 1 ? ' kaart' : ' kaarten') + ' toegevoegd als Pack/Unknown/Other: telt niet als aankoop.</div>' : '') +
           (dayOrphans.length ? '<div class="kassa-note warn">' + dayOrphans.length + (dayOrphans.length === 1 ? ' kaart staat' : ' kaarten staan') + ' op verkocht zonder verkoop (samen ' + eur(dayOrphans.reduce((t, i) => t + (+i.sellingPrice || 0), 0)) + '). Voeg die verkoop toe bovenaan bij Historiek.</div>' : '') +
@@ -2899,7 +2913,8 @@
     else if(histTab === 'aankopen') renderHistAankopen(box);
     else renderHistBeurs(box);
     if(histTab !== 'aankopen') renderOrphanBox(box);
-    box.querySelectorAll('.kassa-add').forEach(b => b.addEventListener('click', e => { e.preventDefault(); openCash(b.dataset.date); }));
+    box.querySelectorAll('.kassa-add:not(.kassa-report)').forEach(b => b.addEventListener('click', e => { e.preventDefault(); openCash(b.dataset.date); }));
+    box.querySelectorAll('.kassa-report').forEach(b => b.addEventListener('click', e => { e.preventDefault(); copyDayReport(b.dataset.date, b.dataset.name); }));
     box.querySelectorAll('.cash-del').forEach(b => b.addEventListener('click', e => {
       e.preventDefault(); e.stopPropagation();
       if(confirm('Deze kasbeweging verwijderen?')) db.ref('cash/' + b.dataset.id).remove();
@@ -3007,6 +3022,50 @@
     document.getElementById('orphanOverlay').classList.add('hidden');
     orphanState = null;
     showToast('Verkoop toegevoegd: ' + eur(total), 'success', 3000);
+  });
+
+  // ===== Dagrapport (alle geldbewegingen van één dag, om te controleren of te delen) =====
+  function dayReportText(dateStr, name){
+    const users = histUsers(), nameOf = i => (users.find(u => u.initial === i) || {}).name || i || '';
+    const t2 = ts => new Date(ts).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
+    const n = v => (+v || 0).toFixed(2);
+    const L = ['DAGRAPPORT ' + (name || '') + ' ' + dateStr + ' (versie ' + APP_VERSION + ')', ''];
+    const tx = transactionsData.filter(t => t && t.timestamp && ymd(t.timestamp) === dateStr).sort((a, b) => a.timestamp - b.timestamp);
+    L.push('VERKOPEN');
+    tx.filter(t => t.type === 'sale').forEach(t => L.push('- ' + t2(t.timestamp) + ' ' + (t.user || '') + ' ' + (t.paymentMethod || 'Cash') + ' €' + n(t.totalSaleValue) + ' | ' +
+      (t.items || []).map(i => (i.name || '?') + ' ' + n(i.price) + (i.id ? '' : ' [bulk]')).join('; ') + (t.restored ? ' [hersteld]' : '')));
+    L.push('', 'TRADES');
+    tx.filter(t => t.type === 'trade').forEach(t => L.push('- ' + t2(t.timestamp) + ' ' + (t.user || '') + ' gaf €' + n(t.totalSaleValue) + ' (' + (t.items || []).map(i => i.name + ' ' + n(i.price)).join('; ') + ') kreeg (' +
+      (t.incomingItems || []).map(i => i.name + ' ' + n(i.tradeValue)).join('; ') + ') cash ' + n(t.cashComponent)));
+    L.push('', 'AANKOPEN / TOEGEVOEGD');
+    histPurchaseGroups(null).filter(g => ymd(g.first) === dateStr).reverse().forEach(g => {
+      L.push('- ' + t2(g.first) + ' ' + nameOf(g.owner) + ' ' + purchaseTitle(g) + ' betaald €' + n(histPaid(g.items)));
+      g.items.forEach(i => L.push('    · ' + i.name + ' [' + (i.itemType || '') + ', ' + (i.acquisitionMethod || '') + (i.acquisitionDetails && i.acquisitionDetails.type ? '/' + i.acquisitionDetails.type : '') + '] €' + n(i.purchasePrice) + ' status ' + (i.status || '')));
+    });
+    L.push('', 'KASBEWEGINGEN');
+    cashData.filter(c => c && c.ts && ymd(c.ts) === dateStr).sort((a, b) => a.ts - b.ts).forEach(c => L.push('- ' + t2(c.ts) + ' ' + (c.user || '') + ' ' + n(c.amount) + ' ' + (c.note || '')));
+    L.push('', 'VANDAAG VERKOCHTE KAARTEN (status)');
+    itemsData.filter(i => i && i.soldAt && ymd(i.soldAt) === dateStr).forEach(i => L.push('- ' + i.name + ' ' + (i.status || '') + ' ' + (i.soldMethod || '') + ' €' + n(i.sellingPrice)));
+    const orph = orphanItems();
+    if(orph.length){ L.push('', 'OP VERKOCHT ZONDER VERKOOP'); orph.forEach(i => L.push('- ' + i.name + ' €' + n(i.sellingPrice))); }
+    return L.join('\n');
+  }
+  function copyDayReport(dateStr, name){
+    const text = dayReportText(dateStr, name);
+    const ta = document.getElementById('reportText');
+    ta.value = text;
+    document.getElementById('reportOverlay').classList.remove('hidden');
+    const done = ok => { document.getElementById('reportSub').textContent = ok ? 'Gekopieerd. Plak dit in de chat met Claude.' : 'Tik op Kopieer (of selecteer de tekst) en plak het in de chat met Claude.'; };
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => done(true), () => done(false)); else done(false);
+  }
+  document.getElementById('reportClose').addEventListener('click', () => document.getElementById('reportOverlay').classList.add('hidden'));
+  document.getElementById('reportCopy').addEventListener('click', () => {
+    const ta = document.getElementById('reportText');
+    ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length);
+    let ok = false;
+    try{ ok = document.execCommand('copy'); }catch(e){}
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(() => { document.getElementById('reportSub').textContent = 'Gekopieerd. Plak dit in de chat met Claude.'; }).catch(() => {});
+    else document.getElementById('reportSub').textContent = ok ? 'Gekopieerd. Plak dit in de chat met Claude.' : 'Selecteer de tekst en kopieer.';
   });
 
   // ===== Kasbewegingen (lening, terugbetaling, wisselgeld) =====
@@ -3336,7 +3395,7 @@
   });
 
   // ===== Versiecontrole: meldt het als er een nieuwere versie online staat (tegen oude, bewaarde pagina's) =====
-  const APP_VERSION = '2026-10-24-1440';
+  const APP_VERSION = '2026-10-24-1510';
   function checkVersion(){
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(v => {
       if(v && v.version && v.version !== APP_VERSION) document.getElementById('updateBanner').classList.remove('hidden');
