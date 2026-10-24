@@ -316,6 +316,14 @@
   .status-pill.stock{ background:var(--violet-soft); color:var(--violet-deep); }
   .status-pill.sold{ background:var(--mint-soft); color:var(--mint); }
   .history-side{ display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0; }
+  .orphan-box{ background:var(--amber-soft); border:1.5px solid #F2C27A; border-radius:var(--radius); padding:14px 16px; margin-bottom:18px; }
+  .orphan-box strong{ font-family:var(--font-display); }
+  .orphan-box .orphan-row{ display:flex; gap:10px; align-items:center; justify-content:space-between; padding:6px 0; border-top:1px solid rgba(180,83,9,.15); }
+  .orphan-box .orphan-row:first-of-type{ border-top:none; }
+  .orphan-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .orphan-line{ display:grid; grid-template-columns:28px minmax(0,1fr) 110px; gap:10px; align-items:center; padding:10px 0; border-bottom:1px solid var(--line); }
+  .orphan-line input[type=checkbox]{ width:22px; height:22px; accent-color:var(--violet-deep); }
+  .orphan-line input[type=number]{ width:100%; min-height:46px; text-align:right; border:1.5px solid var(--line-strong); border-radius:var(--radius-sm); padding:0 10px; font-size:1rem; }
   .tx-edit{ background:var(--surface-raised); border:none; color:var(--violet-deep); font-weight:700; font-size:.85rem; border-radius:999px; padding:7px 12px; cursor:pointer; flex-shrink:0; }
   .tx-edit:hover{ background:var(--violet-soft); }
   .tx-line{ display:flex; gap:8px; align-items:flex-end; margin-bottom:10px; }
@@ -340,7 +348,7 @@
     .fair-stats{ grid-template-columns:1fr 1fr; padding:0 14px 12px; }
     .fair-list{ margin:0 10px 12px; }
     .buy-row{ padding:10px 12px; }
-    #buyEditOverlay .modal-actions, #txEditOverlay .modal-actions{ flex-wrap:wrap; }
+    #buyEditOverlay .modal-actions, #txEditOverlay .modal-actions, #orphanOverlay .modal-actions{ flex-wrap:wrap; }
     #histContent .type-badge{ min-width:0; padding:4px 9px; font-size:.76rem; }
     .tx-edit{ padding:6px 10px; font-size:.8rem; }
     .buy-edit-total{ flex:1 0 100%; margin:0 0 2px; }
@@ -435,6 +443,8 @@
   .sale-total-row{ display:flex; justify-content:space-between; align-items:baseline; padding:14px 18px; margin-top:14px; background:var(--surface-raised); border-radius:var(--radius-md); font-weight:700; font-size:1.05rem; }
   .sale-total-row .mono{ font-family:var(--font-display); font-size:2rem; letter-spacing:-0.02em; }
 
+  #stCartBulk .bulk-row{ margin:10px 0 0; display:grid; grid-template-columns:minmax(0,1fr) 104px 44px; gap:10px; align-items:center; }
+  #stCartBulk .bulk-row input{ width:100% !important; min-width:0; }
   .trade-row, .bulk-row{ display:flex; gap:10px; margin-bottom:10px; align-items:center; }
   .trade-row input, .bulk-row input, .trade-in-row input, .trade-in-row select{
     min-height:46px; background:var(--surface); border:1.5px solid var(--line-strong); border-radius:var(--radius-sm); padding:0 12px; font-size:1rem; font-family:inherit; color:var(--text);
@@ -834,6 +844,29 @@
   </div>
 </div>
 
+<!-- ===== VERLOREN VERKOOP HERSTELLEN ===== -->
+<div class="modal-overlay hidden" id="orphanOverlay">
+  <div class="modal">
+    <h2>Verkoop toevoegen</h2>
+    <div class="modal-sub">Deze kaarten staan op verkocht, maar de verkoop zelf is niet bewaard. Vink aan wat je samen verkocht hebt en vul de prijs per kaart in. Het totaal telt één keer mee.</div>
+    <div id="orphanLines"></div>
+    <div class="field-row">
+      <div class="field"><label>Datum</label><input type="date" id="orphanDate"></div>
+      <div class="field"><label>Betaald met</label>
+        <div class="seg" id="orphanPay">
+          <button type="button" class="seg-btn active" data-method="Cash">Cash</button>
+          <button type="button" class="seg-btn" data-method="Payconiq">Payconiq</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <div class="buy-edit-total">Totaal <strong id="orphanTotal">€0,00</strong></div>
+      <button type="button" class="btn-ghost" id="orphanCancel">Annuleren</button>
+      <button type="button" class="btn-primary" id="orphanSave">Verkoop toevoegen</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== VERKOOP AANPASSEN ===== -->
 <div class="modal-overlay hidden" id="txEditOverlay">
   <div class="modal">
@@ -917,6 +950,8 @@
     <div id="stCartSection">
       <div class="subhead">Geselecteerd (<span id="stCartCount">0</span>)</div>
       <div id="stCartList"><div class="empty-state" style="padding:20px;">Nog niets geselecteerd.</div></div>
+      <div id="stCartBulk"></div>
+      <button type="button" class="btn-ghost" id="stCartAddBulk" style="width:100%; margin-top:8px;">+ Bulk toevoegen</button>
     </div>
 
     <div id="stCashPane">
@@ -1063,13 +1098,26 @@
   // Elke schrijfactie die faalt geeft nu een zichtbare melding
   (function(){
     const origRef = db.ref.bind(db);
+    // Firebase weigert 'undefined' (bv. een lege aankoopprijs) en breekt dan de hele opslag af.
+    function cleanUndef(v, inUpdate){
+      if(v === undefined) return inUpdate ? null : undefined;
+      if(v === null || typeof v !== 'object') return (typeof v === 'number' && !isFinite(v)) ? null : v;
+      if(Array.isArray(v)) return v.map(x => { const c = cleanUndef(x, false); return c === undefined ? null : c; });
+      const o = {};
+      Object.keys(v).forEach(k => { const c = cleanUndef(v[k], inUpdate); if(c !== undefined) o[k] = c; });
+      return o;
+    }
     db.ref = function(path){
       const r = origRef(path);
       ['set','update','remove'].forEach(m => {
         if(typeof r[m] !== 'function') return;
         const orig = r[m].bind(r);
         r[m] = function(){
-          const p = orig.apply(null, arguments);
+          const args = Array.prototype.slice.call(arguments);
+          if((m === 'set' || m === 'update') && args.length) args[0] = cleanUndef(args[0], m === 'update');
+          let p;
+          try{ p = orig.apply(null, args); }
+          catch(err){ showToast(describeDbError(err, 'Opslaan'), 'error'); throw err; }
           if(p && typeof p.catch === 'function') p.catch(err => showToast(describeDbError(err, 'Opslaan'), 'error'));
           if(m === 'set' && p && typeof p.then === 'function' && /^(items|events)\//.test(path)) p.then(() => showToast('Opgeslagen', 'success', 2200), () => {});
           return p;
@@ -2143,6 +2191,9 @@
 
   function openSellTradeModal(){
     stCart = []; stMode = 'cash'; stPayMethod = 'Cash'; stBulkPayMethod = 'Cash';
+    stCartBulk = []; renderStCartBulk();
+    document.getElementById('stCartBulk').classList.remove('hidden');
+    document.getElementById('stCartAddBulk').classList.remove('hidden');
     document.getElementById('stOwnerName').textContent = activeUserName();
     document.getElementById('stSearchInput').value = '';
     stSetSeg('stModeSeg','mode','cash');
@@ -2180,6 +2231,8 @@
     document.getElementById('confirmStBulkBtn').classList.toggle('hidden', stMode!=='bulk');
     document.getElementById('stPickerGrid').classList.toggle('hidden', stMode==='bulk');
     document.getElementById('stCartSection').classList.toggle('hidden', stMode==='bulk');
+    document.getElementById('stCartBulk').classList.toggle('hidden', stMode!=='cash');
+    document.getElementById('stCartAddBulk').classList.toggle('hidden', stMode!=='cash');
     if(stMode === 'trade'){ renderStTradeOut(); }
     if(stMode === 'bulk' && document.getElementById('stBulkRows').children.length === 0){ stAddBulkRow(); }
   }));
@@ -2269,12 +2322,30 @@
     renderStCart();
     if(stMode==='trade') renderStTradeOut();
   }
+  // Bulk bij een gewone verkoop: losse regels (omschrijving + prijs) naast kaarten uit de voorraad
+  let stCartBulk = [];
+  function renderStCartBulk(){
+    const box = document.getElementById('stCartBulk');
+    box.innerHTML = stCartBulk.map((b, i) => '<div class="bulk-row" data-i="' + i + '"><input type="text" class="br-desc" placeholder="bv. 10 bulk cards" value="' + escHtml(b.desc) + '">' +
+      '<input type="number" class="br-price" placeholder="€ prijs" min="0" step="0.5" inputmode="decimal" value="' + escHtml(b.price) + '"><button type="button" class="br-remove" title="Verwijderen">×</button></div>').join('');
+    box.querySelectorAll('.bulk-row').forEach(row => {
+      const b = stCartBulk[+row.dataset.i];
+      row.querySelector('.br-desc').addEventListener('input', e => { b.desc = e.target.value; });
+      row.querySelector('.br-price').addEventListener('input', e => { b.price = e.target.value; updateStCashTotal(); });
+      row.querySelector('.br-remove').addEventListener('click', () => { stCartBulk.splice(+row.dataset.i, 1); renderStCartBulk(); renderStCart(); });
+    });
+  }
+  document.getElementById('stCartAddBulk').addEventListener('click', () => {
+    stCartBulk.push({ desc: '', price: '' });
+    renderStCartBulk(); renderStCart();
+    const d = document.querySelectorAll('#stCartBulk .br-desc'); if(d.length) d[d.length - 1].focus();
+  });
   function stRemoveFromCart(id){ stCart = stCart.filter(c=>c.id!==id); renderStCart(); if(stMode==='trade') renderStTradeOut(); renderStPicker(); }
 
   function renderStCart(){
     const list = document.getElementById('stCartList');
     document.getElementById('stCartCount').textContent = stCart.length;
-    if(stCart.length===0){ list.innerHTML = '<div class="empty-state" style="padding:20px;">Nog niets geselecteerd.</div>'; updateStCashTotal(); return; }
+    if(stCart.length===0){ list.innerHTML = stCartBulk.length ? '' : '<div class="empty-state" style="padding:20px;">Nog niets geselecteerd.</div>'; updateStCashTotal(); return; }
     list.innerHTML = stCart.map(it => `<div class="sale-item-row" data-id="${it.id}">
       <div class="sale-item-name">${it.name}<div class="sale-item-cost">${it.purchasePrice!=null?'Inkoop '+eur(it.purchasePrice):'Inkoop —'}</div></div>
       <input type="number" class="sale-item-price mono" value="${it.sellingPrice}" step="0.5" min="0">
@@ -2299,25 +2370,35 @@
       if(cost===''||cost===undefined){ profitEl.textContent='Profit —'; profitEl.classList.remove('pos'); }
       else { const profit = price-parseFloat(cost); profitEl.textContent=(profit>=0?'+':'-')+eur(Math.abs(profit)); profitEl.classList.toggle('pos', profit>=0); }
     });
+    stCartBulk.forEach(b => { total += parseFloat(b.price) || 0; });
     document.getElementById('stCashTotal').textContent = eur(total);
   }
 
   document.getElementById('confirmStCashBtn').addEventListener('click', () => {
-    if(stCart.length===0) return;
-    const txItems = []; let totalSale=0, totalCost=0, hasCost=true;
+    const bulkLines = stCartBulk.map(b => ({ name: (b.desc || '').trim() || 'Bulk', price: parseFloat(b.price) || 0 })).filter(b => b.price > 0);
+    if(stCart.length===0 && bulkLines.length===0) return;
+    const txItems = [], soldUpdates = []; let totalSale=0, totalCost=0, hasCost=true;
     document.querySelectorAll('#stCartList .sale-item-row').forEach(row => {
       const id = row.dataset.id;
       const item = itemsData.find(i=>i.id===id);
+      if(!item) return;
       const price = parseFloat(row.querySelector('.sale-item-price').value)||0;
-      db.ref('items/'+id).update({ status:'verkocht', sellingPrice: price, soldMethod: stPayMethod });
+      soldUpdates.push([id, { status:'verkocht', sellingPrice: price, soldMethod: stPayMethod, soldAt: Date.now() }]);
       totalSale += price;
-      if(item.purchasePrice!=null){ totalCost += parseFloat(item.purchasePrice); } else { hasCost=false; }
-      txItems.push({ id, name:item.name, price, cost:item.purchasePrice });
+      const cost = item.purchasePrice != null && item.purchasePrice !== '' ? parseFloat(item.purchasePrice) : null;
+      if(cost != null && !isNaN(cost)){ totalCost += cost; } else { hasCost=false; }
+      txItems.push({ id, name:item.name, price, cost: (cost != null && !isNaN(cost)) ? cost : null });
     });
+    const cardSale = totalSale, hasCards = txItems.length > 0;
+    bulkLines.forEach(b => { txItems.push({ name: b.name, price: b.price, bulk: true }); totalSale += b.price; });
+    // Winst enkel over kaarten met aankoopprijs; bulk heeft geen aankoopprijs
     const tx = { id:'tx_'+Date.now(), type:'sale', paymentMethod: stPayMethod, items:txItems,
-      totalSaleValue: totalSale, totalAcquisitionValue: hasCost?totalCost:null,
-      profit: hasCost ? +(totalSale-totalCost).toFixed(2) : null, user: activeUserName(), timestamp: Date.now() };
+      totalSaleValue: +totalSale.toFixed(2), totalAcquisitionValue: (hasCards && hasCost) ? +totalCost.toFixed(2) : null,
+      profit: (hasCards && hasCost) ? +(cardSale-totalCost).toFixed(2) : null, user: activeUserName(), timestamp: Date.now() };
+    if(!hasCards) tx.bulk = true; else if(bulkLines.length) tx.withBulk = true;
+    // Eerst de verkoop bewaren, pas daarna de kaarten op 'verkocht' zetten: zo raak je nooit kaarten kwijt zonder verkoop
     db.ref('transactions/'+tx.id).set(tx);
+    soldUpdates.forEach(u => db.ref('items/'+u[0]).update(u[1]));
     closeStModal();
   });
 
@@ -2632,6 +2713,7 @@
     if(histTab === 'verkopen') renderHistVerkopen(box);
     else if(histTab === 'aankopen') renderHistAankopen(box);
     else renderHistBeurs(box);
+    if(histTab !== 'aankopen') renderOrphanBox(box);
     box.querySelectorAll('.tx-edit').forEach(b => b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openTxEdit(b.dataset.tx); }));
   }
   function refreshHistoryIfVisible(){
@@ -2650,19 +2732,97 @@
   document.querySelectorAll('#histTabs .seg-btn').forEach(b => b.addEventListener('click', () => { histTab = b.dataset.tab; renderHistory(); }));
   document.getElementById('dashAllHistBtn').addEventListener('click', () => openHistory('verkopen'));
 
+  // ===== Verloren verkopen herstellen =====
+  // Kaarten op 'verkocht' die in geen enkele verkoop of trade voorkomen (bv. door de vroegere opslagfout).
+  function orphanItems(){
+    const used = new Set();
+    transactionsData.forEach(t => (t && t.items || []).forEach(i => { if(i && i.id) used.add(i.id); }));
+    const users = histUsers();
+    const initial = histWho ? (users.find(u => u.name === histWho) || {}).initial : null;
+    return itemsData.filter(it => it && it.status === 'verkocht' && it.soldMethod !== 'trade' && !used.has(it.id) && (!initial || it.owner === initial));
+  }
+  function renderOrphanBox(box){
+    const list = orphanItems();
+    if(!list.length) return;
+    const div = document.createElement('div');
+    div.className = 'orphan-box';
+    div.innerHTML = '<div><strong>' + list.length + (list.length === 1 ? ' verkochte kaart zonder verkoop' : ' verkochte kaarten zonder verkoop') + '</strong></div>' +
+      '<div class="history-meta" style="margin:2px 0 8px;">Deze kaarten zijn uit je voorraad, maar de verkoop werd niet bewaard. Voeg de verkoop toe, of zet een kaart terug in de voorraad.</div>' +
+      list.map(it => '<div class="orphan-row"><span>' + escHtml(it.name) + ' <span class="hist-price">' + escHtml([it.set, it.cardNumber].filter(Boolean).join(' · ')) + '</span></span>' +
+        '<button type="button" class="btn-link orphan-back" data-id="' + escHtml(it.id) + '">Terug in voorraad</button></div>').join('') +
+      '<div class="orphan-actions"><button type="button" class="btn-primary" id="orphanOpen">Verkoop toevoegen</button></div>';
+    box.insertBefore(div, box.firstChild);
+    div.querySelector('#orphanOpen').addEventListener('click', openOrphan);
+    div.querySelectorAll('.orphan-back').forEach(b => b.addEventListener('click', () => {
+      if(!confirm('Deze kaart terug in de voorraad zetten?')) return;
+      db.ref('items/' + b.dataset.id).update({ status: 'voorraad', soldMethod: null, soldAt: null });
+    }));
+  }
+  let orphanState = null;
+  function openOrphan(){
+    const list = orphanItems();
+    orphanState = { pay: 'Cash', lines: list.map(it => ({ it, on: true, price: it.sellingPrice != null ? String(it.sellingPrice) : '' })) };
+    document.getElementById('orphanDate').value = ymd(Date.now());
+    renderOrphan();
+    document.getElementById('orphanOverlay').classList.remove('hidden');
+  }
+  function renderOrphan(){
+    const box = document.getElementById('orphanLines');
+    box.innerHTML = orphanState.lines.map((l, i) => '<div class="orphan-line" data-i="' + i + '"><input type="checkbox" class="ol-on"' + (l.on ? ' checked' : '') + '>' +
+      '<div><div class="cs-name">' + escHtml(l.it.name) + '</div><div class="cs-set">' + escHtml([l.it.set, l.it.cardNumber].filter(Boolean).join(' · ')) + '</div></div>' +
+      '<input type="number" inputmode="decimal" min="0" step="0.5" class="ol-p" value="' + escHtml(l.price) + '"' + (l.on ? '' : ' disabled') + '></div>').join('');
+    box.querySelectorAll('.orphan-line').forEach(el => {
+      const l = orphanState.lines[+el.dataset.i];
+      el.querySelector('.ol-on').addEventListener('change', e => { l.on = e.target.checked; renderOrphan(); });
+      el.querySelector('.ol-p').addEventListener('input', e => { l.price = e.target.value; orphanTotal(); });
+    });
+    document.querySelectorAll('#orphanPay .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.method === orphanState.pay));
+    orphanTotal();
+  }
+  function orphanTotal(){
+    document.getElementById('orphanTotal').textContent = eur(orphanState.lines.filter(l => l.on).reduce((t, l) => t + (parseFloat(l.price) || 0), 0));
+  }
+  document.querySelectorAll('#orphanPay .seg-btn').forEach(b => b.addEventListener('click', () => { orphanState.pay = b.dataset.method; renderOrphan(); }));
+  document.getElementById('orphanCancel').addEventListener('click', () => { document.getElementById('orphanOverlay').classList.add('hidden'); orphanState = null; });
+  document.getElementById('orphanSave').addEventListener('click', () => {
+    const lines = orphanState.lines.filter(l => l.on);
+    if(!lines.length) return;
+    const dateStr = document.getElementById('orphanDate').value || ymd(Date.now());
+    const now = new Date();
+    const p = dateStr.split('-').map(Number);
+    const when = dateStr === ymd(Date.now()) ? now.getTime() : new Date(p[0], p[1] - 1, p[2], 12, 0).getTime();
+    let total = 0, cost = 0, hasCost = true;
+    const items = lines.map(l => {
+      const price = parseFloat(l.price) || 0; total += price;
+      const c = l.it.purchasePrice != null && l.it.purchasePrice !== '' ? parseFloat(l.it.purchasePrice) : null;
+      if(c != null && !isNaN(c)) cost += c; else hasCost = false;
+      return { id: l.it.id, name: l.it.name, price, cost: (c != null && !isNaN(c)) ? c : null };
+    });
+    const users = histUsers();
+    const seller = (users.find(u => u.initial === lines[0].it.owner) || {}).name || activeUserName();
+    const tx = { id: 'tx_' + when + '_r', type: 'sale', paymentMethod: orphanState.pay, items, totalSaleValue: +total.toFixed(2),
+      totalAcquisitionValue: hasCost ? +cost.toFixed(2) : null, profit: hasCost ? +(total - cost).toFixed(2) : null,
+      user: seller, timestamp: when, restored: true };
+    db.ref('transactions/' + tx.id).set(tx);
+    lines.forEach(l => db.ref('items/' + l.it.id).update({ sellingPrice: parseFloat(l.price) || 0, soldMethod: orphanState.pay, soldAt: when }));
+    document.getElementById('orphanOverlay').classList.add('hidden');
+    orphanState = null;
+    showToast('Verkoop toegevoegd: ' + eur(total), 'success', 3000);
+  });
+
   // ===== Verkoop aanpassen (vanuit Historiek) =====
   let txEdit = null;
   function openTxEdit(id){
     const tx = transactionsData.find(t => t && t.id === id);
     if(!tx) return;
-    const bulk = !!tx.bulk || !(tx.items || []).some(i => i.id);
+    const bulk = !(tx.items || []).some(i => i.id);   // alleen bulkregels
     txEdit = { tx, bulk, pay: tx.paymentMethod || 'Cash',
       lines: (tx.items || []).map(i => ({ id: i.id || null, name: i.name || '', price: i.price != null ? String(i.price) : '', cost: i.cost })) };
     document.getElementById('txEditTitle').textContent = bulk ? 'Bulkverkoop aanpassen' : 'Verkoop aanpassen';
     const d = new Date(tx.timestamp);
     document.getElementById('txEditSub').textContent = d.toLocaleDateString('nl-BE', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' +
       d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' }) + ' · ' + (tx.user || '');
-    document.getElementById('txEditAddLine').classList.toggle('hidden', !bulk);
+    document.getElementById('txEditAddLine').classList.remove('hidden');
     document.getElementById('txEditNote').textContent = bulk ? '' : 'Verwijder je deze verkoop, dan komen de kaarten terug in de voorraad.';
     renderTxEdit();
     document.getElementById('txEditOverlay').classList.remove('hidden');
@@ -2673,11 +2833,11 @@
   function renderTxEdit(){
     const box = document.getElementById('txEditLines');
     box.innerHTML = txEdit.lines.map((l, i) => '<div class="tx-line" data-i="' + i + '">' +
-      (txEdit.bulk
+      (!l.id
         ? '<div class="field tl-name"><label>Omschrijving</label><input type="text" class="tl-n" value="' + escHtml(l.name) + '" placeholder="bv. 10 bulk cards"></div>'
         : '<div class="tl-fixed">' + escHtml(l.name) + '</div>') +
       '<div class="field tl-price"><label>Prijs (€)</label><input type="number" inputmode="decimal" min="0" step="0.01" class="tl-p" value="' + escHtml(l.price) + '"></div>' +
-      (txEdit.bulk ? '<button type="button" class="btn-ghost tl-del" aria-label="Regel verwijderen">×</button>' : '') +
+      (!l.id ? '<button type="button" class="btn-ghost tl-del" aria-label="Regel verwijderen">×</button>' : '') +
     '</div>').join('');
     box.querySelectorAll('.tx-line').forEach(el => {
       const l = txEdit.lines[+el.dataset.i];
@@ -2710,16 +2870,20 @@
   document.getElementById('txEditSave').addEventListener('click', () => {
     if(!txEdit) return;
     const tx = txEdit.tx;
-    const lines = txEdit.lines.map(l => ({ id: l.id, name: (l.name || '').trim() || (txEdit.bulk ? 'Bulk item' : ''), price: parseFloat(l.price) || 0, cost: l.cost }))
-      .filter(l => !txEdit.bulk || l.price > 0);
+    const lines = txEdit.lines.map(l => ({ id: l.id, name: (l.name || '').trim() || (l.id ? '' : 'Bulk'), price: parseFloat(l.price) || 0, cost: l.cost }))
+      .filter(l => l.id || l.price > 0);
     if(!lines.length){
       if(confirm('Er staat geen enkele regel meer in. Deze verkoop verwijderen?')) txDelete();
       return;
     }
     const total = +lines.reduce((s, l) => s + l.price, 0).toFixed(2);
-    const items = lines.map(l => { const o = { name: l.name, price: l.price }; if(l.id) o.id = l.id; if(l.cost !== undefined) o.cost = l.cost; return o; });
+    const items = lines.map(l => { const o = { name: l.name, price: l.price }; if(l.id) o.id = l.id; else if(!txEdit.bulk) o.bulk = true; if(l.cost !== undefined) o.cost = l.cost; return o; });
     const upd = { items, totalSaleValue: total, paymentMethod: txEdit.pay };
-    if(!txEdit.bulk && tx.totalAcquisitionValue != null) upd.profit = +(total - tx.totalAcquisitionValue).toFixed(2);
+    if(!txEdit.bulk && tx.totalAcquisitionValue != null){
+      const cardTotal = lines.filter(l => l.id).reduce((t, l) => t + l.price, 0);
+      upd.profit = +(cardTotal - tx.totalAcquisitionValue).toFixed(2);
+    }
+    if(!txEdit.bulk) upd.withBulk = lines.some(l => !l.id) || null;
     db.ref('transactions/' + tx.id).update(upd);
     if(!txEdit.bulk) lines.forEach(l => { if(l.id && itemsData.some(x => x.id === l.id)) db.ref('items/' + l.id).update({ sellingPrice: l.price, soldMethod: txEdit.pay }); });
     closeTxEdit();
