@@ -274,6 +274,55 @@
   .picked-chip .pc-name{ font-weight:700; line-height:1.2; }
   .picked-chip .pc-sub{ color:var(--muted); font-size:.85rem; }
   #fResults{ margin-bottom:12px; }
+  /* ===== Historiek ===== */
+  .btn-link{ background:none; border:none; color:var(--violet-deep); font-weight:700; font-size:.95rem; cursor:pointer; padding:6px 2px; }
+  .btn-link:hover{ text-decoration:underline; }
+  .hist-toolbar{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; margin-bottom:18px; }
+  .hist-toolbar .seg{ max-width:420px; flex:1 1 320px; }
+  .hist-who{ display:flex; gap:8px; flex-wrap:wrap; }
+  .hist-who .chip{ min-height:38px; padding:0 14px; font-size:.9rem; }
+  .hist-stats{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; margin-bottom:22px; }
+  .hist-stats .stat-card{ padding:14px 16px; }
+  .hist-stats .stat-value{ font-size:1.5rem; }
+  .fair-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); margin-bottom:12px; box-shadow:var(--shadow-1); overflow:hidden; }
+  .fair-card > summary{ list-style:none; display:flex; gap:14px; align-items:center; padding:14px 18px; cursor:pointer; }
+  .fair-card > summary::-webkit-details-marker{ display:none; }
+  .fair-card > summary::after{ content:'▾'; color:var(--muted); font-size:1rem; transition:transform .15s ease; }
+  .fair-card[open] > summary::after{ transform:rotate(180deg); }
+  .fair-main{ flex:1; min-width:0; }
+  .fair-total{ font-family:var(--font-display); font-weight:700; font-size:1.2rem; white-space:nowrap; }
+  .fair-sub{ color:var(--muted); font-size:.82rem; font-weight:600; text-align:right; }
+  .fair-stats{ display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:10px; padding:0 18px 14px; }
+  .fair-stats > div{ background:var(--surface-raised); border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:2px; }
+  .fair-stats span{ color:var(--muted); font-size:.8rem; font-weight:600; }
+  .fair-stats strong{ font-family:var(--font-display); font-size:1.05rem; }
+  .pos{ color:var(--mint); } .neg{ color:var(--danger); }
+  .fair-note{ color:var(--muted); font-size:.82rem; padding:0 18px 10px; }
+  .fair-list{ margin:0 18px 16px; }
+  .day-head{ display:flex; justify-content:space-between; gap:12px; font-weight:700; margin:22px 2px 8px; font-family:var(--font-display); font-size:1rem; }
+  .day-head:first-of-type{ margin-top:4px; }
+  .day-head b{ color:var(--violet-deep); }
+  .hist-price{ color:var(--muted); font-weight:600; }
+  .hist-more{ display:block; margin:18px auto 0; }
+  .buy-row{ display:flex; gap:12px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); }
+  .buy-row:last-child{ border-bottom:none; }
+  .buy-row img, .buy-row .buy-ph{ width:34px; height:47px; border-radius:5px; object-fit:cover; flex-shrink:0; background:linear-gradient(150deg,#E9E1FB,#FBE3EF); }
+  .buy-main{ flex:1; min-width:0; }
+  .buy-name{ font-weight:700; line-height:1.2; }
+  .buy-meta{ color:var(--muted); font-size:.84rem; }
+  .buy-prices{ text-align:right; font-size:.88rem; white-space:nowrap; }
+  .buy-prices strong{ font-family:var(--font-display); font-size:1rem; }
+  .status-pill{ display:inline-block; font-size:.74rem; font-weight:700; padding:2px 8px; border-radius:999px; margin-top:3px; }
+  .status-pill.stock{ background:var(--violet-soft); color:var(--violet-deep); }
+  .status-pill.sold{ background:var(--mint-soft); color:var(--mint); }
+  .ev-hist{ background:none; border:none; color:var(--violet-deep); font-weight:700; font-size:.88rem; cursor:pointer; padding:4px 0; margin-top:4px; }
+  @media (max-width:700px){
+    .hist-stats{ grid-template-columns:1fr 1fr; gap:10px; }
+    .fair-card > summary{ padding:12px 14px; gap:12px; }
+    .fair-stats{ grid-template-columns:1fr 1fr; padding:0 14px 12px; }
+    .fair-list{ margin:0 10px 12px; }
+    .buy-row{ padding:10px 12px; }
+  }
   .ti-results{ margin-bottom:10px; }
   .ti-results .pick-wrap{ max-height:38vh; }
   .ti-results .pick-card{ background:var(--surface); }
@@ -498,7 +547,7 @@
     .nav-left img{ height:32px; }
     .user-select{ margin-left:auto; }
     .nav-center{
-      position:fixed; left:0; right:0; bottom:0; z-index:60; flex:none; display:grid; grid-template-columns:repeat(5, 1fr); align-items:end; gap:2px;
+      position:fixed; left:0; right:0; bottom:0; z-index:60; flex:none; display:grid; grid-template-columns:repeat(6, 1fr); align-items:end; gap:2px;
       padding:8px 8px calc(8px + env(safe-area-inset-bottom)); background:rgba(255,255,255,0.97); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
       border-top:1px solid var(--line); box-shadow:0 -6px 20px rgba(29,16,51,0.06);
     }
@@ -562,6 +611,7 @@
       <button type="button" class="nav-link" data-page="inventaris"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="13" height="15" rx="2"/><path d="M4 7v12a2 2 0 0 0 2 2h10"/></svg><span>Inventaris</span></button>
       <button type="button" class="nav-sell" id="openSellTradeBtn"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 12h.01M18 12h.01"/></svg><span>Verkopen</span></button>
       <button type="button" class="nav-link" data-page="events"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg><span>Events</span></button>
+      <button type="button" class="nav-link" data-page="historiek"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 7v5l3 2"/></svg><span>Historiek</span></button>
       <div class="nav-add" id="addMenuWrap">
         <button type="button" class="nav-add-btn" id="addMenuBtn" aria-haspopup="menu" aria-expanded="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Toevoegen</span></button>
         <div class="add-menu hidden" id="addMenu" role="menu">
@@ -594,7 +644,7 @@
     </div>
 
     <div class="section">
-      <div class="section-head"><h2>Recente transacties</h2></div>
+      <div class="section-head"><h2>Recente transacties</h2><button type="button" class="btn-link" id="dashAllHistBtn">Alles bekijken →</button></div>
       <div class="history-panel" id="historyPanel"><div class="empty-state">Nog geen transacties.</div></div>
     </div>
 
@@ -635,6 +685,20 @@
     <div id="upcomingEventsList"><div class="empty-state">Nog geen aankomende events.</div></div>
     <div class="subhead" style="margin-top:26px;">Verleden</div>
     <div id="pastEventsList"><div class="empty-state">Nog geen verleden events.</div></div>
+  </div>
+
+  <div id="view-historiek" class="view hidden">
+    <h1 class="page-title">Historiek</h1>
+    <div class="page-sub">Alle verkopen, trades en aankopen. Er wordt niets gewist.</div>
+    <div class="hist-toolbar">
+      <div class="seg" id="histTabs">
+        <button type="button" class="seg-btn active" data-tab="beurs">Per beurs</button>
+        <button type="button" class="seg-btn" data-tab="verkopen">Verkopen</button>
+        <button type="button" class="seg-btn" data-tab="aankopen">Aankopen</button>
+      </div>
+      <div class="hist-who" id="histWho"></div>
+    </div>
+    <div id="histContent"></div>
   </div>
 
 </div>
@@ -1082,6 +1146,8 @@
     document.getElementById('view-dashboard').classList.toggle('hidden', btn.dataset.page!=='dashboard');
     document.getElementById('view-inventaris').classList.toggle('hidden', btn.dataset.page!=='inventaris');
     document.getElementById('view-events').classList.toggle('hidden', btn.dataset.page!=='events');
+    document.getElementById('view-historiek').classList.toggle('hidden', btn.dataset.page!=='historiek');
+    if(btn.dataset.page==='historiek') renderHistory();
     if(btn.dataset.page==='dashboard') renderDashboard();
     else if(btn.dataset.page==='events') renderEvents();
     else if(btn.dataset.page==='inventaris') renderGrid();
@@ -1843,6 +1909,7 @@
   document.getElementById('bkSubmitBtn').addEventListener('click', () => {
     const ids = Object.keys(bkSelected);
     if(ids.length === 0) return;
+    const batchId = 'batch_' + Date.now();   // alle kaarten van deze aankoop samen terugvinden in Historiek
     ids.forEach(id => {
       const s = bkSelected[id];
       const cmPrice = parseFloat(s.cmPrice) || 0;
@@ -1861,7 +1928,7 @@
           sellingPrice: sellingPrice, purchasePrice: purchasePrice,
           image: s.image || null,
           tradeValue: null, acquisitionMethod: 'Cash',
-          acquisitionDetails: { type: 'bulkPurchase', marketPrice: cmPrice, percentage: pct },
+          acquisitionDetails: { type: 'bulkPurchase', marketPrice: cmPrice, percentage: pct }, batchId,
           owner: activeInitial, status: 'voorraad', createdAt: Date.now()
         };
         saveItem(item);
@@ -2358,12 +2425,169 @@
     closeStModal();
   });
 
+  // ===== Historiek =====
+  let histTab = 'beurs', histWho = '', histDayLimit = 30, histBuyLimit = 30, histOpenEvent = null;
+  function histUsers(){ return [...document.querySelectorAll('#userSelectMenu button[data-name]')].map(b => ({ name: b.dataset.name, initial: b.dataset.initial })); }
+  function ymd(ts){ const d = new Date(ts); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function fmtDay(v){ const p = String(v).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('nl-BE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }); }
+  function eurS(v){ v = +v || 0; return (v < 0 ? '-' : '') + eur(Math.abs(v)); }
+  function histTx(){ return transactionsData.filter(tx => tx && tx.timestamp && (!histWho || tx.user === histWho)); }
+  function txSummary(list){
+    const s = { omzet: 0, verkopen: 0, kaarten: 0, winst: 0, zonderKost: 0, trades: 0, tradeWaarde: 0, tradeCash: 0 };
+    list.forEach(tx => {
+      if(tx.type === 'trade'){ s.trades++; s.tradeWaarde += +tx.totalSaleValue || 0; s.tradeCash += +tx.cashComponent || 0; }
+      else if(tx.type === 'sale'){
+        s.verkopen++; s.omzet += +tx.totalSaleValue || 0; s.kaarten += (tx.items || []).length;
+        if(tx.profit != null) s.winst += +tx.profit; else s.zonderKost++;
+      }
+    });
+    return s;
+  }
+  function txRowHTML(tx){
+    const label = tx.type === 'sale' ? (tx.bulk ? 'Bulk' : 'Verkoop') : tx.type === 'trade' ? 'Trade' : 'Aankoop';
+    const items = (tx.items || []).map(i => escHtml(i.name) + (tx.type === 'sale' && i.price != null ? ' <span class="hist-price">' + eur(i.price) + '</span>' : '')).join(', ') || '—';
+    const inc = (tx.incomingItems && tx.incomingItems.length) ? '<div class="history-meta">Terug: ' + tx.incomingItems.map(i => escHtml(i.name) + ' (' + eur(i.tradeValue) + ')').join(', ') + (tx.cashComponent ? ' · cash ' + eurS(tx.cashComponent) : '') + '</div>' : '';
+    const time = new Date(tx.timestamp).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
+    const meta = [escHtml(tx.user || ''), time, escHtml(tx.paymentMethod || ''), tx.profit != null ? 'winst ' + eurS(tx.profit) : ''].filter(Boolean).join(' · ');
+    return '<div class="history-row"><span class="type-badge ' + escHtml(tx.type) + '">' + label + '</span><div class="history-main"><div class="history-items">' + items + '</div><div class="history-meta">' + meta + '</div>' + inc + '</div><div class="history-amount">' + eur(tx.totalSaleValue || 0) + '</div></div>';
+  }
+  function statCards(list){ return '<div class="hist-stats">' + list.map(x => '<div class="stat-card"><div class="stat-label">' + x[0] + '</div><div class="stat-value' + (x[2] ? ' ' + x[2] : '') + '">' + x[1] + '</div></div>').join('') + '</div>'; }
+
+  function renderHistBeurs(box){
+    const today = ymd(Date.now());
+    const evs = eventsData.filter(e => e && e.date && e.date <= today).sort((a, b) => b.date.localeCompare(a.date));
+    if(!evs.length){ box.innerHTML = '<div class="empty-state">Nog geen voorbije beurzen. Zet je beurzen bij Events: alle verkopen op die dag worden hier automatisch opgeteld.</div>'; return; }
+    const byDay = {};
+    histTx().forEach(t => { (byDay[ymd(t.timestamp)] = byDay[ymd(t.timestamp)] || []).push(t); });
+    const tot = { omzet: 0, winst: 0, tafel: 0 };
+    const cards = evs.map(ev => {
+      const list = (byDay[ev.date] || []).sort((a, b) => a.timestamp - b.timestamp);
+      const s = txSummary(list), tafel = +ev.tablePrice || 0, result = s.winst - tafel;
+      tot.omzet += s.omzet; tot.winst += s.winst; tot.tafel += tafel;
+      const d = new Date(ev.date);
+      const perPerson = histWho ? '' : histUsers().map(u => { const x = txSummary(list.filter(t => t.user === u.name)); return (x.omzet || x.trades) ? u.name + ' ' + eur(x.omzet) : ''; }).filter(Boolean).join(' · ');
+      return '<details class="fair-card" data-ev="' + escHtml(ev.id) + '"' + (histOpenEvent === ev.id ? ' open' : '') + '>' +
+        '<summary><div class="event-date-badge"><div class="event-day">' + d.getDate() + '</div><div class="event-month">' + d.toLocaleDateString('nl-BE', { month: 'short' }).toUpperCase() + '</div></div>' +
+        '<div class="fair-main"><div class="event-name">' + escHtml(ev.name) + '</div><div class="event-meta">' + fmtDay(ev.date) + (perPerson ? ' · ' + perPerson : '') + '</div></div>' +
+        '<div><div class="fair-total">' + eur(s.omzet) + '</div><div class="fair-sub">' + s.verkopen + (s.verkopen === 1 ? ' verkoop' : ' verkopen') + '</div></div></summary>' +
+        '<div class="fair-stats">' +
+          '<div><span>Omzet</span><strong>' + eur(s.omzet) + '</strong></div>' +
+          '<div><span>Kaarten verkocht</span><strong>' + s.kaarten + '</strong></div>' +
+          '<div><span>Winst op verkopen</span><strong>' + eurS(s.winst) + (s.zonderKost ? '*' : '') + '</strong></div>' +
+          '<div><span>Tafel</span><strong>' + (tafel ? eur(tafel) : '—') + '</strong></div>' +
+          '<div><span>Resultaat</span><strong class="' + (result >= 0 ? 'pos' : 'neg') + '">' + eurS(result) + '</strong></div>' +
+          (s.trades ? '<div><span>Trades</span><strong>' + s.trades + ' · ' + eur(s.tradeWaarde) + '</strong></div>' : '') +
+        '</div>' +
+        (s.zonderKost ? '<div class="fair-note">* ' + s.zonderKost + (s.zonderKost === 1 ? ' verkoop' : ' verkopen') + ' zonder aankoopprijs (bv. bulk) ' + (s.zonderKost === 1 ? 'telt' : 'tellen') + ' niet mee in de winst.</div>' : '') +
+        '<div class="history-panel fair-list">' + (list.length ? list.map(txRowHTML).join('') : '<div class="empty-state">Geen verkopen op deze dag.</div>') + '</div>' +
+      '</details>';
+    }).join('');
+    box.innerHTML = statCards([['Beurzen', evs.length], ['Omzet', eur(tot.omzet)], ['Winst', eurS(tot.winst)], ['Tafelkosten', eur(tot.tafel)]]) + cards;
+    const open = histOpenEvent && box.querySelector('.fair-card[open]');
+    if(open) setTimeout(() => open.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    histOpenEvent = null;
+  }
+
+  function renderHistVerkopen(box){
+    const tx = histTx().sort((a, b) => b.timestamp - a.timestamp);
+    if(!tx.length){ box.innerHTML = '<div class="empty-state">Nog geen verkopen of trades.</div>'; return; }
+    const s = txSummary(tx);
+    const groups = {}, order = [];
+    tx.forEach(t => { const k = ymd(t.timestamp); if(!groups[k]){ groups[k] = []; order.push(k); } groups[k].push(t); });
+    const evName = {}; eventsData.forEach(e => { if(e && e.date) evName[e.date] = e.name; });
+    const days = order.slice(0, histDayLimit);
+    box.innerHTML = statCards([['Omzet', eur(s.omzet)], ['Winst', eurS(s.winst)], ['Verkopen', s.verkopen], ['Trades', s.trades]]) +
+      days.map(k => {
+        const ds = txSummary(groups[k]);
+        return '<div class="day-head"><span>' + fmtDay(k) + (evName[k] ? ' · <b>' + escHtml(evName[k]) + '</b>' : '') + '</span><span>' + eur(ds.omzet) + '</span></div>' +
+          '<div class="history-panel">' + groups[k].map(txRowHTML).join('') + '</div>';
+      }).join('') +
+      (order.length > days.length ? '<button type="button" class="btn-ghost hist-more" id="histMoreDays">Meer tonen (' + (order.length - days.length) + ' dagen)</button>' : '');
+    const more = document.getElementById('histMoreDays');
+    if(more) more.addEventListener('click', () => { histDayLimit += 30; renderHistory(); });
+  }
+
+  function renderHistAankopen(box){
+    const users = histUsers();
+    const nameOf = i => (users.find(u => u.initial === i) || {}).name || i || '';
+    const initial = histWho ? (users.find(u => u.name === histWho) || {}).initial : null;
+    const items = itemsData.filter(it => it && it.createdAt && !(it.acquisitionDetails && it.acquisitionDetails.type === 'trade') && (!initial || it.owner === initial))
+      .sort((a, b) => a.createdAt - b.createdAt);
+    const groups = [];
+    items.forEach(it => {
+      const bulk = !!(it.acquisitionDetails && it.acquisitionDetails.type === 'bulkPurchase');
+      let g = null;
+      if(it.batchId) g = groups.find(x => x.batchId === it.batchId) || null;
+      else {
+        const last = groups.length ? groups[groups.length - 1] : null;   // oudere kaarten: samen toegevoegd binnen 10 minuten
+        if(last && !last.batchId && last.owner === it.owner && last.bulk === bulk && it.createdAt - last.last <= 10 * 60 * 1000) g = last;
+      }
+      if(!g){ g = { batchId: it.batchId || null, owner: it.owner, bulk, first: it.createdAt, last: it.createdAt, items: [] }; groups.push(g); }
+      g.items.push(it); g.last = Math.max(g.last, it.createdAt);
+    });
+    groups.reverse();
+    if(!groups.length){ box.innerHTML = '<div class="empty-state">Nog geen aankopen.</div>'; return; }
+    const paid = list => list.reduce((t, i) => t + (i.purchasePrice != null ? +i.purchasePrice || 0 : 0), 0);
+    const allItems = groups.reduce((t, g) => t.concat(g.items), []);
+    const shown = groups.slice(0, histBuyLimit);
+    box.innerHTML = statCards([['Aankopen', groups.length], ['Kaarten', allItems.length], ['Betaald', eur(paid(allItems))], ['Nog op voorraad', allItems.filter(i => i.status === 'voorraad').length]]) +
+      shown.map(g => {
+        const d = new Date(g.first);
+        const cm = g.items.reduce((t, i) => t + (i.acquisitionDetails && i.acquisitionDetails.marketPrice != null ? +i.acquisitionDetails.marketPrice || 0 : 0), 0);
+        const pcts = [...new Set(g.items.map(i => i.acquisitionDetails && i.acquisitionDetails.percentage).filter(v => v != null))];
+        const sold = g.items.filter(i => i.status === 'verkocht').length;
+        const title = g.bulk ? 'Collectie gekocht' + (pcts.length === 1 ? ' (' + pcts[0] + '%)' : '') : 'Los toegevoegd';
+        const rows = g.items.map(i => {
+          const ad = i.acquisitionDetails || {};
+          const sub = [i.set, i.cardNumber, i.itemType === 'Slab' ? ((i.gradingCompany || '') + ' ' + (i.grade || '')).trim() : i.condition].filter(Boolean).map(escHtml).join(' · ');
+          return '<div class="buy-row">' + (i.image ? '<img src="' + escHtml(i.image) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="buy-ph"></div>') +
+            '<div class="buy-main"><div class="buy-name">' + escHtml(i.name) + '</div><div class="buy-meta">' + sub + '</div>' +
+            '<span class="status-pill ' + (i.status === 'verkocht' ? 'sold' : 'stock') + '">' + (i.status === 'verkocht' ? 'Verkocht' : 'Op voorraad') + '</span></div>' +
+            '<div class="buy-prices"><div>Betaald <strong>' + priceOrDash(i.purchasePrice) + '</strong></div>' + (ad.marketPrice != null ? '<div class="buy-meta">CM ' + eur(ad.marketPrice) + '</div>' : '') + '<div class="buy-meta">Verkoop ' + eur(i.sellingPrice) + '</div></div></div>';
+        }).join('');
+        return '<details class="fair-card"><summary><div class="event-date-badge"><div class="event-day">' + d.getDate() + '</div><div class="event-month">' + d.toLocaleDateString('nl-BE', { month: 'short' }).toUpperCase() + '</div></div>' +
+          '<div class="fair-main"><div class="event-name">' + title + '</div><div class="event-meta">' + fmtDay(ymd(g.first)) + ' · ' + d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' }) + ' · ' + escHtml(nameOf(g.owner)) + ' · ' + g.items.length + (g.items.length === 1 ? ' kaart' : ' kaarten') + (sold ? ' · ' + sold + ' verkocht' : '') + '</div></div>' +
+          '<div><div class="fair-total">' + eur(paid(g.items)) + '</div><div class="fair-sub">' + (cm ? 'CM ' + eur(cm) : 'betaald') + '</div></div></summary>' +
+          '<div class="history-panel fair-list">' + rows + '</div></details>';
+      }).join('') +
+      (groups.length > shown.length ? '<button type="button" class="btn-ghost hist-more" id="histMoreBuys">Meer tonen (' + (groups.length - shown.length) + ')</button>' : '');
+    const more = document.getElementById('histMoreBuys');
+    if(more) more.addEventListener('click', () => { histBuyLimit += 30; renderHistory(); });
+  }
+
+  function renderHistory(){
+    const who = document.getElementById('histWho');
+    who.innerHTML = [{ name: '', label: 'Iedereen' }].concat(histUsers().map(u => ({ name: u.name, label: u.name })))
+      .map(u => '<button type="button" class="chip' + (u.name === histWho ? ' active' : '') + '" data-who="' + escHtml(u.name) + '">' + escHtml(u.label) + '</button>').join('');
+    who.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => { histWho = c.dataset.who; renderHistory(); }));
+    document.querySelectorAll('#histTabs .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === histTab));
+    const box = document.getElementById('histContent');
+    if(histTab === 'verkopen') renderHistVerkopen(box);
+    else if(histTab === 'aankopen') renderHistAankopen(box);
+    else renderHistBeurs(box);
+  }
+  function refreshHistoryIfVisible(){
+    const v = document.getElementById('view-historiek');
+    if(v && !v.classList.contains('hidden')){
+      const open = [...document.querySelectorAll('#histContent details[open]')].map(d => d.dataset.ev).filter(Boolean);
+      renderHistory();
+      open.forEach(id => { const d = document.querySelector('#histContent details[data-ev="' + id + '"]'); if(d) d.open = true; });
+    }
+  }
+  function openHistory(tab, evId){
+    histTab = tab || 'beurs'; histOpenEvent = evId || null;
+    document.querySelector('.nav-link[data-page="historiek"]').click();
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll('#histTabs .seg-btn').forEach(b => b.addEventListener('click', () => { histTab = b.dataset.tab; renderHistory(); }));
+  document.getElementById('dashAllHistBtn').addEventListener('click', () => openHistory('verkopen'));
+
   // ===== Load =====
   function loadItems(){
     db.ref('items').on('value', snap => {
       const val = snap.val();
       itemsData = val ? Object.values(val) : [];
-      renderGrid(); renderDashboard();
+      renderGrid(); renderDashboard(); refreshHistoryIfVisible();
       scheduleItemRepair();
     }, err => { console.error('Items laadfout:', err); showToast(describeDbError(err, 'Laden'), 'error'); });
   }
@@ -2415,7 +2639,7 @@
     db.ref('transactions').on('value', snap => {
       const val = snap.val();
       transactionsData = val ? Object.values(val) : [];
-      renderDashboard();
+      renderDashboard(); refreshHistoryIfVisible();
     }, err => { console.error('Transacties laadfout:', err); showToast(describeDbError(err, 'Laden'), 'error'); });
   }
 
@@ -2481,6 +2705,7 @@
         <div class="event-name">${ev.name}</div>
         <div class="event-meta">${ev.tablePrice?('€'+ev.tablePrice+' tafel · '):''}${ev.dimensions?(ev.dimensions+' · '):''}${paidBadge}</div>
         ${ev.notes ? `<div class="event-notes">${ev.notes}</div>` : ''}
+        ${isPast ? `<button type="button" class="ev-hist" data-id="${ev.id}">Verkopen van deze beurs →</button>` : ''}
       </div>
       <div class="event-actions">
         <button type="button" class="ev-edit" data-id="${ev.id}" title="Bewerken">✎</button>
@@ -2495,6 +2720,7 @@
     document.getElementById('upcomingEventsList').innerHTML = upcoming.length===0 ? '<div class="empty-state">Nog geen aankomende events.</div>' : upcoming.map(e=>eventCardHTML(e,false)).join('');
     document.getElementById('pastEventsList').innerHTML = past.length===0 ? '<div class="empty-state">Nog geen verleden events.</div>' : past.map(e=>eventCardHTML(e,true)).join('');
     document.querySelectorAll('.ev-edit').forEach(b => b.addEventListener('click', () => openEditEventModal(eventsData.find(e=>e.id===b.dataset.id))));
+    document.querySelectorAll('.ev-hist').forEach(b => b.addEventListener('click', () => openHistory('beurs', b.dataset.id)));
     document.querySelectorAll('.ev-delete').forEach(b => b.addEventListener('click', () => {
       if(confirm('Dit event verwijderen?')) db.ref('events/'+b.dataset.id).remove();
     }));
@@ -2503,7 +2729,7 @@
     db.ref('events').on('value', snap => {
       const val = snap.val();
       eventsData = val ? Object.values(val) : [];
-      renderEvents();
+      renderEvents(); refreshHistoryIfVisible();
     }, err => { console.error('Events laadfout:', err); showToast(describeDbError(err, 'Laden'), 'error'); });
   }
   loadEvents();
