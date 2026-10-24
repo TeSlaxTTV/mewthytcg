@@ -303,6 +303,8 @@
   .day-head{ display:flex; justify-content:space-between; gap:12px; font-weight:700; margin:22px 2px 8px; font-family:var(--font-display); font-size:1rem; }
   .day-head:first-of-type{ margin-top:4px; }
   .day-head b{ color:var(--violet-deep); }
+  .update-banner{ position:fixed; left:50%; top:76px; white-space:nowrap; transform:translateX(-50%); z-index:400; background:var(--foil); color:#fff; border:none; border-radius:999px; padding:12px 20px; font-weight:700; font-size:.95rem; box-shadow:0 10px 26px rgba(100,48,220,.35); cursor:pointer; max-width:calc(100vw - 24px); }
+  .app-version{ text-align:center; color:var(--muted); font-size:.75rem; margin:30px 0 10px; opacity:.7; }
   .ev-tag{ color:var(--violet-deep); }
   .hist-price{ color:var(--muted); font-weight:600; }
   .hist-more{ display:block; margin:18px auto 0; }
@@ -1053,6 +1055,7 @@
 </div>
 
 <div class="toast-wrap" id="toastWrap" aria-live="polite"></div>
+<button type="button" class="update-banner hidden" id="updateBanner">Nieuwe versie — tik om te vernieuwen</button>
 <div id="printLabelsContainer"></div>
 
 <!-- ===== CAMERA BARCODE SCANNER ===== -->
@@ -3080,6 +3083,21 @@
     buyEdit = null;
     if(changed) showToast('Aankoop bijgewerkt', 'success', 2500);
   });
+
+  // ===== Versiecontrole: meldt het als er een nieuwere versie online staat (tegen oude, bewaarde pagina's) =====
+  const APP_VERSION = '2026-10-24-1225';
+  function checkVersion(){
+    fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(v => {
+      if(v && v.version && v.version !== APP_VERSION) document.getElementById('updateBanner').classList.remove('hidden');
+    }).catch(() => {});
+  }
+  document.getElementById('updateBanner').addEventListener('click', () => {
+    location.replace(location.pathname + '?v=' + Date.now() + location.hash);
+  });
+  setTimeout(checkVersion, 2000);
+  setInterval(checkVersion, 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) checkVersion(); });
+  { const f = document.createElement('div'); f.className = 'app-version'; f.textContent = 'Versie ' + APP_VERSION; const m = document.querySelector('.main') || document.body; m.appendChild(f); }
 
   // ===== Load =====
   function loadItems(){
