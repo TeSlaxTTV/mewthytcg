@@ -336,6 +336,9 @@
   .tx-line .tl-price{ flex:0 0 110px; }
   .tx-line .tl-fixed{ flex:1; min-width:0; font-weight:700; padding-bottom:12px; }
   .tx-line .tl-del{ flex:0 0 auto; min-height:48px; padding:0 14px; }
+  .tr-in-line{ border:1.5px solid var(--line); border-radius:var(--radius-md); padding:12px; margin-bottom:10px; }
+  .tr-in-line .field{ margin-bottom:8px; }
+  .tr-in-line .tr-sold{ font-size:.8rem; color:var(--muted); font-weight:600; }
   .tx-edit-note{ color:var(--muted); font-size:.85rem; margin:4px 0 8px; }
   .buy-actions{ display:flex; justify-content:flex-end; padding:0 18px 10px; }
   .buy-edit-all{ display:flex; gap:10px; align-items:flex-end; background:var(--surface-raised); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:14px; }
@@ -877,6 +880,26 @@
       <div class="buy-edit-total">Totaal <strong id="orphanTotal">€0,00</strong></div>
       <button type="button" class="btn-ghost" id="orphanCancel">Annuleren</button>
       <button type="button" class="btn-primary" id="orphanSave">Verkoop toevoegen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TRADE AANPASSEN ===== -->
+<div class="modal-overlay hidden" id="tradeEditOverlay">
+  <div class="modal">
+    <h2>Trade aanpassen</h2>
+    <div class="modal-sub" id="trEditSub">—</div>
+    <div class="subhead">Jij gaf (trade-waarde)</div>
+    <div id="trEditOut"></div>
+    <div class="subhead">Je kreeg terug</div>
+    <div id="trEditIn"></div>
+    <div class="field"><label>Cash erbij (jij ontvangt) of tekort (jij betaalt)</label><input type="number" inputmode="decimal" step="0.5" id="trEditCash" placeholder="bv. 20 of -20"></div>
+    <div class="trade-summary" id="trEditSummary"></div>
+    <div class="tx-edit-note">Verwijder je deze trade, dan komen je weggegeven kaarten terug in de voorraad en verdwijnen de ontvangen kaarten (als ze nog niet verkocht zijn).</div>
+    <button type="button" class="btn-ghost btn-danger" id="trEditDelete" style="width:100%; margin-top:6px;">Trade verwijderen</button>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="trEditCancel">Annuleren</button>
+      <button type="button" class="btn-primary" id="trEditSave">Opslaan</button>
     </div>
   </div>
 </div>
@@ -2602,8 +2625,6 @@
     const cash = parseFloat(document.getElementById('stTradeCashField').value)||0;
     const outNames = stCart.map(i=>i.name).join(', ');
 
-    stCart.forEach(it => db.ref('items/'+it.id).update({ status:'verkocht', soldMethod:'trade', tradeValue: it.sellingPrice }));
-
     const netCostBasis = outTotal - cash;
     inRows.forEach(r => {
       const share = inTotal>0 ? r.tradeValue/inTotal : 0;
@@ -2615,13 +2636,16 @@
         owner:activeInitial, status:'voorraad', createdAt:Date.now() };
       if(r.image) newItem.image = r.image;
       db.ref('items/'+id).set(newItem);
+      r.id = id;
     });
 
     const tx = { id:'tx_'+Date.now(), type:'trade', paymentMethod: cash!==0?(cash>0?'Cash ontvangen':'Cash betaald'):null,
       items: stCart.map(i=>({id:i.id,name:i.name,price:i.sellingPrice})),
-      incomingItems: inRows.map(r=>({name:r.name, marketPrice:r.marketPrice, percentage:r.pct, tradeValue:r.tradeValue})),
+      incomingItems: inRows.map(r=>({id:r.id, name:r.name, marketPrice:r.marketPrice, percentage:r.pct, tradeValue:r.tradeValue})),
       totalSaleValue: outTotal, totalAcquisitionValue:null, profit:null, cashComponent:cash, user:activeUserName(), timestamp:Date.now() };
     db.ref('transactions/'+tx.id).set(tx);
+    // pas na het bewaren van de trade de weggegeven kaarten op 'verkocht' zetten
+    stCart.forEach(it => db.ref('items/'+it.id).update({ status:'verkocht', soldMethod:'trade', tradeValue: it.sellingPrice, soldAt: Date.now() }));
 
     closeStModal();
   });
@@ -2650,7 +2674,7 @@
     const inc = (tx.incomingItems && tx.incomingItems.length) ? '<div class="history-meta">Terug: ' + tx.incomingItems.map(i => escHtml(i.name) + ' (' + eur(i.tradeValue) + ')').join(', ') + (tx.cashComponent ? ' · cash ' + eurS(tx.cashComponent) : '') + '</div>' : '';
     const time = new Date(tx.timestamp).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
     const meta = [escHtml(tx.user || ''), time, escHtml(tx.paymentMethod || ''), tx.profit != null ? 'winst ' + eurS(tx.profit) : ''].filter(Boolean).join(' · ');
-    const edit = (tx.type === 'sale' && tx.id) ? '<button type="button" class="tx-edit" data-tx="' + escHtml(tx.id) + '" aria-label="Verkoop aanpassen">Aanpassen</button>' : '';
+    const edit = ((tx.type === 'sale' || tx.type === 'trade') && tx.id) ? '<button type="button" class="tx-edit" data-tx="' + escHtml(tx.id) + '" aria-label="Aanpassen">Aanpassen</button>' : '';
     return '<div class="history-row"><span class="type-badge ' + escHtml(tx.type) + '">' + label + '</span><div class="history-main"><div class="history-items">' + items + '</div><div class="history-meta">' + meta + '</div>' + inc + '</div><div class="history-side"><div class="history-amount">' + eur(tx.totalSaleValue || 0) + '</div>' + edit + '</div></div>';
   }
   function statCards(list){ return '<div class="hist-stats">' + list.map(x => '<div class="stat-card"><div class="stat-label">' + x[0] + '</div><div class="stat-value' + (x[2] ? ' ' + x[2] : '') + '">' + x[1] + '</div></div>').join('') + '</div>'; }
@@ -2804,7 +2828,11 @@
     else if(histTab === 'aankopen') renderHistAankopen(box);
     else renderHistBeurs(box);
     if(histTab !== 'aankopen') renderOrphanBox(box);
-    box.querySelectorAll('.tx-edit').forEach(b => b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openTxEdit(b.dataset.tx); }));
+    box.querySelectorAll('.tx-edit').forEach(b => b.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      const t = transactionsData.find(x => x && x.id === b.dataset.tx);
+      if(t && t.type === 'trade') openTradeEdit(t.id); else openTxEdit(b.dataset.tx);
+    }));
   }
   function refreshHistoryIfVisible(){
     const v = document.getElementById('view-historiek');
@@ -2898,6 +2926,120 @@
     document.getElementById('orphanOverlay').classList.add('hidden');
     orphanState = null;
     showToast('Verkoop toegevoegd: ' + eur(total), 'success', 3000);
+  });
+
+  // ===== Trade aanpassen (vanuit Historiek) =====
+  let trEdit = null;
+  // Ontvangen kaarten van een trade terugvinden: via id (nieuwe trades) of, bij oudere trades, op naam en tijdstip
+  function tradeIncomingItems(tx){
+    const used = new Set();
+    return (tx.incomingItems || []).map(inc => {
+      let it = inc.id ? itemsData.find(x => x.id === inc.id) : null;
+      if(!it){
+        it = itemsData.find(x => x && !used.has(x.id) && x.acquisitionDetails && x.acquisitionDetails.type === 'trade' &&
+          x.name === inc.name && Math.abs((x.createdAt || 0) - tx.timestamp) < 2 * 60 * 1000) || null;
+      }
+      if(it) used.add(it.id);
+      return it;
+    });
+  }
+  function openTradeEdit(id){
+    const tx = transactionsData.find(t => t && t.id === id);
+    if(!tx) return;
+    const incItems = tradeIncomingItems(tx);
+    trEdit = {
+      tx,
+      out: (tx.items || []).map(i => ({ id: i.id || null, name: i.name || '', price: i.price != null ? String(i.price) : '' })),
+      inc: (tx.incomingItems || []).map((i, k) => ({ item: incItems[k], name: i.name || '', market: i.marketPrice != null ? String(i.marketPrice) : '',
+        pct: i.percentage != null ? String(i.percentage) : '80', value: i.tradeValue != null ? String(i.tradeValue) : '' })),
+      cash: tx.cashComponent ? String(tx.cashComponent) : ''
+    };
+    const d = new Date(tx.timestamp);
+    document.getElementById('trEditSub').textContent = d.toLocaleDateString('nl-BE', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' +
+      d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' }) + ' · ' + (tx.user || '');
+    document.getElementById('trEditCash').value = trEdit.cash;
+    renderTradeEdit();
+    document.getElementById('tradeEditOverlay').classList.remove('hidden');
+  }
+  function trSummary(){
+    const out = trEdit.out.reduce((t, l) => t + (parseFloat(l.price) || 0), 0);
+    const inn = trEdit.inc.reduce((t, l) => t + (parseFloat(l.value) || 0), 0);
+    const cash = parseFloat(trEdit.cash) || 0;
+    document.getElementById('trEditSummary').innerHTML = 'Jij gaf <strong>' + eur(out) + '</strong> · je kreeg <strong>' + eur(inn) + '</strong>' +
+      (cash ? ' · cash <strong>' + eurS(cash) + '</strong>' : '');
+  }
+  function renderTradeEdit(){
+    const outBox = document.getElementById('trEditOut');
+    outBox.innerHTML = trEdit.out.map((l, i) => '<div class="tx-line" data-i="' + i + '"><div class="tl-fixed">' + escHtml(l.name) + '</div>' +
+      '<div class="field tl-price"><label>Waarde (€)</label><input type="number" inputmode="decimal" min="0" step="0.5" class="tro-p" value="' + escHtml(l.price) + '"></div></div>').join('') ||
+      '<div class="empty-state">—</div>';
+    outBox.querySelectorAll('.tx-line').forEach(el => {
+      const l = trEdit.out[+el.dataset.i];
+      el.querySelector('.tro-p').addEventListener('input', e => { l.price = e.target.value; trSummary(); });
+    });
+    const inBox = document.getElementById('trEditIn');
+    inBox.innerHTML = trEdit.inc.map((l, i) => '<div class="tr-in-line" data-i="' + i + '">' +
+      '<div class="field"><label>Kaart</label><input type="text" class="tri-n" value="' + escHtml(l.name) + '"></div>' +
+      (l.item && l.item.status === 'verkocht' ? '<div class="tr-sold">Deze kaart is intussen verkocht.</div>' : '') +
+      '<div class="field-row-3"><div class="field"><label>Marktprijs (€)</label><input type="number" inputmode="decimal" min="0" step="0.5" class="tri-m" value="' + escHtml(l.market) + '"></div>' +
+      '<div class="field"><label>%</label><input type="number" inputmode="numeric" min="0" max="100" class="tri-pct" value="' + escHtml(l.pct) + '"></div>' +
+      '<div class="field"><label>Trade-waarde (€)</label><input type="number" inputmode="decimal" min="0" step="0.5" class="tri-v" value="' + escHtml(l.value) + '"></div></div></div>').join('') ||
+      '<div class="empty-state">Geen kaarten ontvangen.</div>';
+    inBox.querySelectorAll('.tr-in-line').forEach(el => {
+      const l = trEdit.inc[+el.dataset.i];
+      const vI = el.querySelector('.tri-v');
+      const recalc = () => { if(l.market !== '' && l.pct !== ''){ l.value = String(+((parseFloat(l.market) || 0) * (parseFloat(l.pct) || 0) / 100).toFixed(2)); vI.value = l.value; } trSummary(); };
+      el.querySelector('.tri-n').addEventListener('input', e => { l.name = e.target.value; });
+      el.querySelector('.tri-m').addEventListener('input', e => { l.market = e.target.value; recalc(); });
+      el.querySelector('.tri-pct').addEventListener('input', e => { l.pct = e.target.value; recalc(); });
+      vI.addEventListener('input', e => { l.value = e.target.value; trSummary(); });
+    });
+    trSummary();
+  }
+  document.getElementById('trEditCash').addEventListener('input', e => { if(trEdit){ trEdit.cash = e.target.value; trSummary(); } });
+  function closeTradeEdit(){ document.getElementById('tradeEditOverlay').classList.add('hidden'); trEdit = null; }
+  document.getElementById('trEditCancel').addEventListener('click', closeTradeEdit);
+  document.getElementById('trEditSave').addEventListener('click', () => {
+    if(!trEdit) return;
+    const tx = trEdit.tx, num = v => parseFloat(v) || 0;
+    const out = trEdit.out.map(l => ({ id: l.id, name: l.name, price: num(l.price) }));
+    const inc = trEdit.inc.map(l => ({ item: l.item, name: (l.name || '').trim() || 'Ruilkaart', market: num(l.market), pct: num(l.pct), value: num(l.value) }));
+    const outTotal = +out.reduce((t, l) => t + l.price, 0).toFixed(2);
+    const inTotal = inc.reduce((t, l) => t + l.value, 0);
+    const cash = num(trEdit.cash);
+    const outNames = out.map(l => l.name).join(', ');
+    const items = out.map(l => { const o = { name: l.name, price: l.price }; if(l.id) o.id = l.id; return o; });
+    const incomingItems = inc.map(l => { const o = { name: l.name, marketPrice: l.market, percentage: l.pct, tradeValue: l.value }; if(l.item) o.id = l.item.id; return o; });
+    db.ref('transactions/' + tx.id).update({ items, incomingItems, totalSaleValue: outTotal, cashComponent: cash,
+      paymentMethod: cash !== 0 ? (cash > 0 ? 'Cash ontvangen' : 'Cash betaald') : null });
+    // weggegeven kaarten: trade-waarde bijwerken
+    out.forEach(l => { if(l.id && itemsData.some(x => x.id === l.id)) db.ref('items/' + l.id).update({ tradeValue: l.price }); });
+    // ontvangen kaarten: kostprijs opnieuw verdelen zoals bij het afronden van een trade
+    const net = outTotal - cash;
+    inc.forEach((l, k) => {
+      if(!l.item) return;
+      const share = inTotal > 0 ? l.value / inTotal : 0;
+      const old = trEdit.inc[k].item;
+      const upd = { name: l.name, purchasePrice: +(net * share).toFixed(2), tradeValue: l.value,
+        acquisitionDetails: Object.assign({}, old.acquisitionDetails || {}, { type: 'trade', givenSummary: outNames, marketPriceAtTrade: l.market, percentage: l.pct, tradeValue: l.value, cashAdjust: cash ? -cash * share : 0 }) };
+      const oldMarket = old.acquisitionDetails && old.acquisitionDetails.marketPriceAtTrade;
+      if(old.status !== 'verkocht' && oldMarket != null && +old.sellingPrice === +oldMarket && l.market !== +oldMarket) upd.sellingPrice = l.market;
+      db.ref('items/' + l.item.id).update(upd);
+    });
+    closeTradeEdit();
+    showToast('Trade bijgewerkt', 'success', 2500);
+  });
+  document.getElementById('trEditDelete').addEventListener('click', () => {
+    if(!trEdit) return;
+    const tx = trEdit.tx;
+    const soldIn = trEdit.inc.filter(l => l.item && l.item.status === 'verkocht');
+    if(!confirm('Deze trade verwijderen? Je weggegeven kaarten komen terug in de voorraad' + (trEdit.inc.some(l => l.item && l.item.status !== 'verkocht') ? ' en de ontvangen kaarten worden verwijderd' : '') + '.' +
+      (soldIn.length ? '\n\nLet op: ' + soldIn.length + ' ontvangen kaart(en) zijn al verkocht en blijven staan.' : ''))) return;
+    (tx.items || []).forEach(i => { if(i.id && itemsData.some(x => x.id === i.id)) db.ref('items/' + i.id).update({ status: 'voorraad', soldMethod: null, tradeValue: null, soldAt: null }); });
+    trEdit.inc.forEach(l => { if(l.item && l.item.status !== 'verkocht') db.ref('items/' + l.item.id).remove(); });
+    db.ref('transactions/' + tx.id).remove();
+    closeTradeEdit();
+    showToast('Trade verwijderd', 'success', 2500);
   });
 
   // ===== Verkoop aanpassen (vanuit Historiek) =====
@@ -3085,7 +3227,7 @@
   });
 
   // ===== Versiecontrole: meldt het als er een nieuwere versie online staat (tegen oude, bewaarde pagina's) =====
-  const APP_VERSION = '2026-10-24-1225';
+  const APP_VERSION = '2026-10-24-1250';
   function checkVersion(){
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(v => {
       if(v && v.version && v.version !== APP_VERSION) document.getElementById('updateBanner').classList.remove('hidden');
