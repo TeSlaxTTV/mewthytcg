@@ -281,7 +281,8 @@
   .hist-toolbar .seg{ max-width:420px; flex:1 1 320px; }
   .hist-who{ display:flex; gap:8px; flex-wrap:wrap; }
   .hist-who .chip{ min-height:38px; padding:0 14px; font-size:.9rem; }
-  .hist-stats{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; margin-bottom:22px; }
+  .hist-stats{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:22px; }
+  .fair-sub-head{ font-family:var(--font-display); font-weight:700; font-size:.95rem; margin:4px 18px 8px; }
   .hist-stats .stat-card{ padding:14px 16px; }
   .hist-stats .stat-value{ font-size:1.5rem; }
   .fair-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); margin-bottom:12px; box-shadow:var(--shadow-1); overflow:hidden; }
@@ -302,6 +303,7 @@
   .day-head{ display:flex; justify-content:space-between; gap:12px; font-weight:700; margin:22px 2px 8px; font-family:var(--font-display); font-size:1rem; }
   .day-head:first-of-type{ margin-top:4px; }
   .day-head b{ color:var(--violet-deep); }
+  .ev-tag{ color:var(--violet-deep); }
   .hist-price{ color:var(--muted); font-weight:600; }
   .hist-more{ display:block; margin:18px auto 0; }
   .buy-row{ display:flex; gap:12px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); }
@@ -347,6 +349,7 @@
     .fair-card > summary{ padding:12px 14px; gap:12px; }
     .fair-stats{ grid-template-columns:1fr 1fr; padding:0 14px 12px; }
     .fair-list{ margin:0 10px 12px; }
+    .fair-sub-head{ margin:4px 12px 8px; }
     .buy-row{ padding:10px 12px; }
     #buyEditOverlay .modal-actions, #txEditOverlay .modal-actions, #orphanOverlay .modal-actions{ flex-wrap:wrap; }
     #histContent .type-badge{ min-width:0; padding:4px 9px; font-size:.76rem; }
@@ -2655,11 +2658,17 @@
     if(!evs.length){ box.innerHTML = '<div class="empty-state">Nog geen voorbije beurzen. Zet je beurzen bij Events: alle verkopen op die dag worden hier automatisch opgeteld.</div>'; return; }
     const byDay = {};
     histTx().forEach(t => { (byDay[ymd(t.timestamp)] = byDay[ymd(t.timestamp)] || []).push(t); });
-    const tot = { omzet: 0, winst: 0, tafel: 0 };
+    const buysByDay = {};
+    histPurchaseGroups(histWhoInitial()).forEach(g => { const k = ymd(g.first); (buysByDay[k] = buysByDay[k] || []).push(g); });
+    const usersAll = histUsers();
+    const tot = { omzet: 0, winst: 0, tafel: 0, inkoop: 0 };
     const cards = evs.map(ev => {
       const list = (byDay[ev.date] || []).sort((a, b) => a.timestamp - b.timestamp);
       const s = txSummary(list), tafel = +ev.tablePrice || 0, result = s.winst - tafel;
-      tot.omzet += s.omzet; tot.winst += s.winst; tot.tafel += tafel;
+      const buys = (buysByDay[ev.date] || []).slice().sort((a, b) => a.first - b.first);
+      const inkoop = buys.reduce((t, g) => t + histPaid(g.items), 0);
+      const inkoopKaarten = buys.reduce((t, g) => t + g.items.filter(i => i.itemType !== 'Bulk').length, 0);
+      tot.omzet += s.omzet; tot.winst += s.winst; tot.tafel += tafel; tot.inkoop += inkoop;
       const d = new Date(ev.date);
       const perPerson = histWho ? '' : histUsers().map(u => { const x = txSummary(list.filter(t => t.user === u.name)); return (x.omzet || x.trades) ? u.name + ' ' + eur(x.omzet) : ''; }).filter(Boolean).join(' · ');
       return '<details class="fair-card" data-ev="' + escHtml(ev.id) + '"' + (histOpenEvent === ev.id ? ' open' : '') + '>' +
@@ -2673,12 +2682,22 @@
           '<div><span>Tafel</span><strong>' + (tafel ? eur(tafel) : '—') + '</strong></div>' +
           '<div><span>Resultaat</span><strong class="' + (result >= 0 ? 'pos' : 'neg') + '">' + eurS(result) + '</strong></div>' +
           (s.trades ? '<div><span>Trades</span><strong>' + s.trades + ' · ' + eur(s.tradeWaarde) + '</strong></div>' : '') +
+          '<div><span>Ingekocht' + (inkoopKaarten ? ' (' + inkoopKaarten + ' kaarten)' : '') + '</span><strong>' + (inkoop ? eur(inkoop) : '—') + '</strong></div>' +
+          '<div><span>Omzet − inkoop</span><strong class="' + (s.omzet - inkoop >= 0 ? 'pos' : 'neg') + '">' + eurS(s.omzet - inkoop) + '</strong></div>' +
         '</div>' +
         (s.zonderKost ? '<div class="fair-note">* ' + s.zonderKost + (s.zonderKost === 1 ? ' verkoop' : ' verkopen') + ' zonder aankoopprijs (bv. bulk) ' + (s.zonderKost === 1 ? 'telt' : 'tellen') + ' niet mee in de winst.</div>' : '') +
+        (buys.length ? '<div class="fair-sub-head">Aankopen</div><div class="history-panel fair-list">' + buys.map(g => {
+            const t = new Date(g.first).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
+            const who = (usersAll.find(u => u.initial === g.owner) || {}).name || '';
+            const names = g.items.filter(i => i.itemType !== 'Bulk').slice(0, 6).map(i => escHtml(i.name)).join(', ') + (g.items.filter(i => i.itemType !== 'Bulk').length > 6 ? ', …' : '');
+            return '<div class="history-row"><span class="type-badge purchase">Aankoop</span><div class="history-main"><div class="history-items">' + escHtml(purchaseTitle(g)) + ' · ' + purchaseCountText(g) + '</div>' +
+              '<div class="history-meta">' + escHtml(who) + ' · ' + t + (names ? ' · ' + names : '') + '</div></div><div class="history-side"><div class="history-amount">' + eur(histPaid(g.items)) + '</div></div></div>';
+          }).join('') + '</div>' : '') +
+        '<div class="fair-sub-head">Verkopen</div>' +
         '<div class="history-panel fair-list">' + (list.length ? list.map(txRowHTML).join('') : '<div class="empty-state">Geen verkopen op deze dag.</div>') + '</div>' +
       '</details>';
     }).join('');
-    box.innerHTML = statCards([['Beurzen', evs.length], ['Omzet', eur(tot.omzet)], ['Winst', eurS(tot.winst)], ['Tafelkosten', eur(tot.tafel)]]) + cards;
+    box.innerHTML = statCards([['Beurzen', evs.length], ['Omzet', eur(tot.omzet)], ['Winst', eurS(tot.winst)], ['Ingekocht', eur(tot.inkoop)], ['Tafelkosten', eur(tot.tafel)]]) + cards;
     const open = histOpenEvent && box.querySelector('.fair-card[open]');
     if(open) setTimeout(() => open.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     histOpenEvent = null;
@@ -2703,10 +2722,8 @@
     if(more) more.addEventListener('click', () => { histDayLimit += 30; renderHistory(); });
   }
 
-  function renderHistAankopen(box){
-    const users = histUsers();
-    const nameOf = i => (users.find(u => u.initial === i) || {}).name || i || '';
-    const initial = histWho ? (users.find(u => u.name === histWho) || {}).initial : null;
+  // Aankopen groeperen: per aankoop (batch-id) of, voor oudere kaarten, samen toegevoegd binnen 10 minuten. Nieuwste eerst.
+  function histPurchaseGroups(initial){
     const items = itemsData.filter(it => it && it.createdAt && !(it.acquisitionDetails && it.acquisitionDetails.type === 'trade') && (!initial || it.owner === initial))
       .sort((a, b) => a.createdAt - b.createdAt);
     const groups = [];
@@ -2722,6 +2739,23 @@
       g.items.push(it); g.last = Math.max(g.last, it.createdAt);
     });
     groups.reverse();
+    return groups;
+  }
+  function histPaid(list){ return list.reduce((t, i) => t + (i.purchasePrice != null ? +i.purchasePrice || 0 : 0), 0); }
+  function histWhoInitial(){ const users = histUsers(); return histWho ? (users.find(u => u.name === histWho) || {}).initial : null; }
+  function purchaseTitle(g){
+    const pcts = [...new Set(g.items.map(i => i.acquisitionDetails && i.acquisitionDetails.percentage).filter(v => v != null))];
+    return g.bulk ? 'Collectie gekocht' + (pcts.length === 1 ? ' (' + pcts[0] + '%)' : '') : 'Los toegevoegd';
+  }
+  function purchaseCountText(g){
+    const cards = g.items.filter(i => i.itemType !== 'Bulk').length, bulks = g.items.length - cards;
+    return (cards ? cards + (cards === 1 ? ' kaart' : ' kaarten') : '') + (bulks ? (cards ? ' + ' : '') + 'bulk' : '');
+  }
+  function renderHistAankopen(box){
+    const users = histUsers();
+    const nameOf = i => (users.find(u => u.initial === i) || {}).name || i || '';
+    const initial = histWho ? (users.find(u => u.name === histWho) || {}).initial : null;
+    const groups = histPurchaseGroups(initial);
     if(!groups.length){ box.innerHTML = '<div class="empty-state">Nog geen aankopen.</div>'; return; }
     const paid = list => list.reduce((t, i) => t + (i.purchasePrice != null ? +i.purchasePrice || 0 : 0), 0);
     const allItems = groups.reduce((t, g) => t.concat(g.items), []);
@@ -2732,7 +2766,8 @@
         const cm = g.items.reduce((t, i) => t + (i.acquisitionDetails && i.acquisitionDetails.marketPrice != null ? +i.acquisitionDetails.marketPrice || 0 : 0), 0);
         const pcts = [...new Set(g.items.map(i => i.acquisitionDetails && i.acquisitionDetails.percentage).filter(v => v != null))];
         const sold = g.items.filter(i => i.status === 'verkocht').length;
-        const title = g.bulk ? 'Collectie gekocht' + (pcts.length === 1 ? ' (' + pcts[0] + '%)' : '') : 'Los toegevoegd';
+        const title = purchaseTitle(g);
+        const evHere = eventsData.find(e => e && e.date === ymd(g.first));
         const rows = g.items.map(i => {
           const ad = i.acquisitionDetails || {};
           const isBulk = i.itemType === 'Bulk';
@@ -2743,7 +2778,7 @@
             '<div class="buy-prices"><div>Betaald <strong>' + priceOrDash(i.purchasePrice) + '</strong></div>' + (ad.marketPrice != null ? '<div class="buy-meta">CM ' + eur(ad.marketPrice) + '</div>' : '') + (isBulk ? '' : '<div class="buy-meta">Verkoop ' + eur(i.sellingPrice) + '</div>') + '</div></div>';
         }).join('');
         return '<details class="fair-card"><summary><div class="event-date-badge"><div class="event-day">' + d.getDate() + '</div><div class="event-month">' + d.toLocaleDateString('nl-BE', { month: 'short' }).toUpperCase() + '</div></div>' +
-          '<div class="fair-main"><div class="event-name">' + title + '</div><div class="event-meta">' + fmtDay(ymd(g.first)) + ' · ' + d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' }) + ' · ' + escHtml(nameOf(g.owner)) + ' · ' + g.items.length + (g.items.length === 1 ? ' kaart' : ' kaarten') + (sold ? ' · ' + sold + ' verkocht' : '') + '</div></div>' +
+          '<div class="fair-main"><div class="event-name">' + title + '</div><div class="event-meta">' + fmtDay(ymd(g.first)) + ' · ' + d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' }) + ' · ' + escHtml(nameOf(g.owner)) + ' · ' + purchaseCountText(g) + (sold ? ' · ' + sold + ' verkocht' : '') + (evHere ? ' · <b class="ev-tag">' + escHtml(evHere.name) + '</b>' : '') + '</div></div>' +
           '<div><div class="fair-total">' + eur(paid(g.items)) + '</div><div class="fair-sub">' + (cm ? 'CM ' + eur(cm) : 'betaald') + '</div></div></summary>' +
           '<div class="buy-actions"><button type="button" class="btn-ghost buy-edit" data-g="' + groups.indexOf(g) + '">Aanpassen</button></div>' +
           '<div class="history-panel fair-list">' + rows + '</div></details>';
