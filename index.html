@@ -282,6 +282,15 @@
   .hist-who{ display:flex; gap:8px; flex-wrap:wrap; }
   .hist-who .chip{ min-height:38px; padding:0 14px; font-size:.9rem; }
   .hist-stats{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:22px; }
+  .kassa{ margin:0 18px 14px; background:var(--surface); border:1.5px solid var(--line); border-radius:var(--radius-md); padding:12px 14px; }
+  .kassa-title{ font-family:var(--font-display); font-weight:700; margin-bottom:6px; }
+  .kassa-row{ display:flex; justify-content:space-between; gap:12px; padding:4px 0; font-size:.95rem; }
+  .kassa-total{ border-top:1.5px solid var(--line-strong); margin-top:4px; padding-top:8px; font-weight:800; font-family:var(--font-display); font-size:1.05rem; }
+  .kassa-row .cash-del{ background:none; border:none; color:var(--muted); cursor:pointer; font-size:1rem; padding:0 4px; margin-left:6px; }
+  .kassa-row .cash-del:hover{ color:var(--danger); }
+  .kassa-add{ margin-top:8px; width:100%; }
+  .kassa-note{ color:var(--muted); font-size:.84rem; margin-top:6px; }
+  .kassa-note.warn{ color:var(--amber-deep); font-weight:600; }
   .fair-sub-head{ font-family:var(--font-display); font-weight:700; font-size:.95rem; margin:4px 18px 8px; }
   .hist-stats .stat-card{ padding:14px 16px; }
   .hist-stats .stat-value{ font-size:1.5rem; }
@@ -355,6 +364,7 @@
     .fair-stats{ grid-template-columns:1fr 1fr; padding:0 14px 12px; }
     .fair-list{ margin:0 10px 12px; }
     .fair-sub-head{ margin:4px 12px 8px; }
+    .kassa{ margin:0 12px 12px; }
     .buy-row{ padding:10px 12px; }
     #buyEditOverlay .modal-actions, #txEditOverlay .modal-actions, #orphanOverlay .modal-actions{ flex-wrap:wrap; }
     #histContent .type-badge{ min-width:0; padding:4px 9px; font-size:.76rem; }
@@ -880,6 +890,29 @@
       <div class="buy-edit-total">Totaal <strong id="orphanTotal">€0,00</strong></div>
       <button type="button" class="btn-ghost" id="orphanCancel">Annuleren</button>
       <button type="button" class="btn-primary" id="orphanSave">Verkoop toevoegen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== KASBEWEGING ===== -->
+<div class="modal-overlay hidden" id="cashOverlay">
+  <div class="modal">
+    <h2>Kasbeweging</h2>
+    <div class="modal-sub">Geld dat in of uit je kassa gaat zonder verkoop of aankoop, bv. een lening, terugbetaling of wisselgeld.</div>
+    <div class="field"><label>Richting</label>
+      <div class="seg" id="cashDir">
+        <button type="button" class="seg-btn active" data-dir="in">Erin (+)</button>
+        <button type="button" class="seg-btn" data-dir="out">Eruit (−)</button>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Bedrag (€)</label><input type="number" inputmode="decimal" min="0" step="0.5" id="cashAmount" placeholder="bv. 220"></div>
+      <div class="field"><label>Datum</label><input type="date" id="cashDate"></div>
+    </div>
+    <div class="field"><label>Omschrijving</label><input type="text" id="cashNote" placeholder="bv. Lening van Jordan / Terugbetaald aan Jordan"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="cashCancel">Annuleren</button>
+      <button type="button" class="btn-primary" id="cashSave">Opslaan</button>
     </div>
   </div>
 </div>
@@ -2692,9 +2725,23 @@
     const cards = evs.map(ev => {
       const list = (byDay[ev.date] || []).sort((a, b) => a.timestamp - b.timestamp);
       const s = txSummary(list), tafel = +ev.tablePrice || 0, result = s.winst - tafel;
-      const buys = (buysByDay[ev.date] || []).slice().sort((a, b) => a.first - b.first);
+      const allBuys = (buysByDay[ev.date] || []).slice().sort((a, b) => a.first - b.first);
+      const buys = allBuys.filter(g => g.items.some(isPaidPurchase));
+      const notBought = allBuys.reduce((t, g) => t + g.items.filter(i => !isPaidPurchase(i)).length, 0);
       const inkoop = buys.reduce((t, g) => t + histPaid(g.items), 0);
-      const inkoopKaarten = buys.reduce((t, g) => t + g.items.filter(i => i.itemType !== 'Bulk').length, 0);
+      const inkoopKaarten = buys.reduce((t, g) => t + g.items.filter(i => i.itemType !== 'Bulk' && isPaidPurchase(i)).length, 0);
+      // Kassa: wat er cash in- en uitging
+      let cashSales = 0, otherSales = 0, otherLabel = {}, tradeIn = 0, tradeOut = 0;
+      list.forEach(t => {
+        if(t.type === 'sale'){ const v = +t.totalSaleValue || 0; if((t.paymentMethod || 'Cash') === 'Cash') cashSales += v; else { otherSales += v; otherLabel[t.paymentMethod] = 1; } }
+        else if(t.type === 'trade'){ const c = +t.cashComponent || 0; if(c > 0) tradeIn += c; else tradeOut += -c; }
+      });
+      const buyColl = buys.filter(g => g.bulk).reduce((t, g) => t + histPaid(g.items), 0);
+      const buyLoose = inkoop - buyColl;
+      const moves = cashData.filter(c => c && c.ts && ymd(c.ts) === ev.date && (!histWho || c.user === histWho)).sort((a, b) => a.ts - b.ts);
+      const movesSum = moves.reduce((t, c) => t + (+c.amount || 0), 0);
+      const kassa = cashSales + tradeIn - tradeOut - inkoop + movesSum;
+      const dayOrphans = itemsData.filter(it => it && it.status === 'verkocht' && it.soldAt && ymd(it.soldAt) === ev.date && orphanIds().has(it.id));
       tot.omzet += s.omzet; tot.winst += s.winst; tot.tafel += tafel; tot.inkoop += inkoop;
       const d = new Date(ev.date);
       const perPerson = histWho ? '' : histUsers().map(u => { const x = txSummary(list.filter(t => t.user === u.name)); return (x.omzet || x.trades) ? u.name + ' ' + eur(x.omzet) : ''; }).filter(Boolean).join(' · ');
@@ -2710,7 +2757,20 @@
           '<div><span>Resultaat</span><strong class="' + (result >= 0 ? 'pos' : 'neg') + '">' + eurS(result) + '</strong></div>' +
           (s.trades ? '<div><span>Trades</span><strong>' + s.trades + ' · ' + eur(s.tradeWaarde) + '</strong></div>' : '') +
           '<div><span>Ingekocht' + (inkoopKaarten ? ' (' + inkoopKaarten + ' kaarten)' : '') + '</span><strong>' + (inkoop ? eur(inkoop) : '—') + '</strong></div>' +
-          '<div><span>Omzet − inkoop</span><strong class="' + (s.omzet - inkoop >= 0 ? 'pos' : 'neg') + '">' + eurS(s.omzet - inkoop) + '</strong></div>' +
+        '</div>' +
+        '<div class="kassa">' +
+          '<div class="kassa-title">Kassa (cash)</div>' +
+          '<div class="kassa-row"><span>Verkopen cash</span><span class="pos">+' + eur(cashSales) + '</span></div>' +
+          (tradeIn ? '<div class="kassa-row"><span>Cash ontvangen bij trades</span><span class="pos">+' + eur(tradeIn) + '</span></div>' : '') +
+          (tradeOut ? '<div class="kassa-row"><span>Cash bijbetaald bij trades</span><span class="neg">-' + eur(tradeOut) + '</span></div>' : '') +
+          (buyColl ? '<div class="kassa-row"><span>Collecties / bulk gekocht</span><span class="neg">-' + eur(buyColl) + '</span></div>' : '') +
+          (buyLoose ? '<div class="kassa-row"><span>Losse kaarten gekocht (Cash)</span><span class="neg">-' + eur(buyLoose) + '</span></div>' : '') +
+          moves.map(c => '<div class="kassa-row"><span>' + escHtml(c.note || 'Kasbeweging') + '</span><span><span class="' + (c.amount >= 0 ? 'pos' : 'neg') + '">' + (c.amount >= 0 ? '+' : '-') + eur(Math.abs(c.amount)) + '</span><button type="button" class="cash-del" data-id="' + escHtml(c.id) + '" title="Verwijderen">×</button></span></div>').join('') +
+          '<div class="kassa-row kassa-total"><span>Moet in de kassa zitten</span><span>' + eurS(kassa) + '</span></div>' +
+          '<button type="button" class="btn-ghost kassa-add" data-date="' + escHtml(ev.date) + '">+ Kasbeweging (lening, terugbetaling…)</button>' +
+          (otherSales ? '<div class="kassa-note">Niet in de kassa: ' + eur(otherSales) + ' via ' + escHtml(Object.keys(otherLabel).join(', ')) + '.</div>' : '') +
+          (notBought ? '<div class="kassa-note">' + notBought + (notBought === 1 ? ' kaart' : ' kaarten') + ' toegevoegd als Pack/Unknown/Other: telt niet als aankoop.</div>' : '') +
+          (dayOrphans.length ? '<div class="kassa-note warn">' + dayOrphans.length + (dayOrphans.length === 1 ? ' kaart staat' : ' kaarten staan') + ' op verkocht zonder verkoop (samen ' + eur(dayOrphans.reduce((t, i) => t + (+i.sellingPrice || 0), 0)) + '). Voeg die verkoop toe bovenaan bij Historiek.</div>' : '') +
         '</div>' +
         (s.zonderKost ? '<div class="fair-note">* ' + s.zonderKost + (s.zonderKost === 1 ? ' verkoop' : ' verkopen') + ' zonder aankoopprijs (bv. bulk) ' + (s.zonderKost === 1 ? 'telt' : 'tellen') + ' niet mee in de winst.</div>' : '') +
         (buys.length ? '<div class="fair-sub-head">Aankopen</div><div class="history-panel fair-list">' + buys.map(g => {
@@ -2768,11 +2828,22 @@
     groups.reverse();
     return groups;
   }
-  function histPaid(list){ return list.reduce((t, i) => t + (i.purchasePrice != null ? +i.purchasePrice || 0 : 0), 0); }
+  // Telt als aankoop (geld betaald): collecties/bulk via Meerdere kaarten, of losse kaarten met verkrijging 'Cash'.
+  // Pack / Unknown / Other (bv. eigen voorraad invoeren) tellen niet als inkoop.
+  function isPaidPurchase(i){
+    const ad = i.acquisitionDetails || {};
+    if(ad.type === 'trade') return false;
+    if(ad.type === 'bulkPurchase') return true;
+    return (i.acquisitionMethod || 'Cash') === 'Cash';
+  }
+  function histPaid(list){ return list.filter(isPaidPurchase).reduce((t, i) => t + (i.purchasePrice != null ? +i.purchasePrice || 0 : 0), 0); }
   function histWhoInitial(){ const users = histUsers(); return histWho ? (users.find(u => u.name === histWho) || {}).initial : null; }
   function purchaseTitle(g){
     const pcts = [...new Set(g.items.map(i => i.acquisitionDetails && i.acquisitionDetails.percentage).filter(v => v != null))];
-    return g.bulk ? 'Collectie gekocht' + (pcts.length === 1 ? ' (' + pcts[0] + '%)' : '') : 'Los toegevoegd';
+    if(g.bulk) return 'Collectie gekocht' + (pcts.length === 1 ? ' (' + pcts[0] + '%)' : '');
+    if(g.items.some(isPaidPurchase)) return 'Los gekocht';
+    const m = [...new Set(g.items.map(i => i.acquisitionMethod || 'Other'))];
+    return 'Toegevoegd (' + m.join(', ') + ') · geen aankoop';
   }
   function purchaseCountText(g){
     const cards = g.items.filter(i => i.itemType !== 'Bulk').length, bulks = g.items.length - cards;
@@ -2787,7 +2858,7 @@
     const paid = list => list.reduce((t, i) => t + (i.purchasePrice != null ? +i.purchasePrice || 0 : 0), 0);
     const allItems = groups.reduce((t, g) => t.concat(g.items), []);
     const shown = groups.slice(0, histBuyLimit);
-    box.innerHTML = statCards([['Aankopen', groups.length], ['Kaarten', allItems.length], ['Betaald', eur(paid(allItems))], ['Nog op voorraad', allItems.filter(i => i.status === 'voorraad').length]]) +
+    box.innerHTML = statCards([['Aankopen', groups.filter(g => g.items.some(isPaidPurchase)).length], ['Kaarten', allItems.length], ['Betaald', eur(histPaid(allItems))], ['Nog op voorraad', allItems.filter(i => i.status === 'voorraad').length]]) +
       shown.map(g => {
         const d = new Date(g.first);
         const cm = g.items.reduce((t, i) => t + (i.acquisitionDetails && i.acquisitionDetails.marketPrice != null ? +i.acquisitionDetails.marketPrice || 0 : 0), 0);
@@ -2806,7 +2877,7 @@
         }).join('');
         return '<details class="fair-card"><summary><div class="event-date-badge"><div class="event-day">' + d.getDate() + '</div><div class="event-month">' + d.toLocaleDateString('nl-BE', { month: 'short' }).toUpperCase() + '</div></div>' +
           '<div class="fair-main"><div class="event-name">' + title + '</div><div class="event-meta">' + fmtDay(ymd(g.first)) + ' · ' + d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' }) + ' · ' + escHtml(nameOf(g.owner)) + ' · ' + purchaseCountText(g) + (sold ? ' · ' + sold + ' verkocht' : '') + (evHere ? ' · <b class="ev-tag">' + escHtml(evHere.name) + '</b>' : '') + '</div></div>' +
-          '<div><div class="fair-total">' + eur(paid(g.items)) + '</div><div class="fair-sub">' + (cm ? 'CM ' + eur(cm) : 'betaald') + '</div></div></summary>' +
+          '<div><div class="fair-total">' + eur(histPaid(g.items)) + '</div><div class="fair-sub">' + (cm ? 'CM ' + eur(cm) : (g.items.some(isPaidPurchase) ? 'betaald' : 'geen aankoop')) + '</div></div></summary>' +
           '<div class="buy-actions"><button type="button" class="btn-ghost buy-edit" data-g="' + groups.indexOf(g) + '">Aanpassen</button></div>' +
           '<div class="history-panel fair-list">' + rows + '</div></details>';
       }).join('') +
@@ -2828,6 +2899,11 @@
     else if(histTab === 'aankopen') renderHistAankopen(box);
     else renderHistBeurs(box);
     if(histTab !== 'aankopen') renderOrphanBox(box);
+    box.querySelectorAll('.kassa-add').forEach(b => b.addEventListener('click', e => { e.preventDefault(); openCash(b.dataset.date); }));
+    box.querySelectorAll('.cash-del').forEach(b => b.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      if(confirm('Deze kasbeweging verwijderen?')) db.ref('cash/' + b.dataset.id).remove();
+    }));
     box.querySelectorAll('.tx-edit').forEach(b => b.addEventListener('click', e => {
       e.preventDefault(); e.stopPropagation();
       const t = transactionsData.find(x => x && x.id === b.dataset.tx);
@@ -2852,6 +2928,11 @@
 
   // ===== Verloren verkopen herstellen =====
   // Kaarten op 'verkocht' die in geen enkele verkoop of trade voorkomen (bv. door de vroegere opslagfout).
+  function orphanIds(){
+    const used = new Set();
+    transactionsData.forEach(t => (t && t.items || []).forEach(i => { if(i && i.id) used.add(i.id); }));
+    return new Set(itemsData.filter(it => it && it.status === 'verkocht' && it.soldMethod !== 'trade' && !used.has(it.id)).map(it => it.id));
+  }
   function orphanItems(){
     const used = new Set();
     transactionsData.forEach(t => (t && t.items || []).forEach(i => { if(i && i.id) used.add(i.id); }));
@@ -2926,6 +3007,34 @@
     document.getElementById('orphanOverlay').classList.add('hidden');
     orphanState = null;
     showToast('Verkoop toegevoegd: ' + eur(total), 'success', 3000);
+  });
+
+  // ===== Kasbewegingen (lening, terugbetaling, wisselgeld) =====
+  let cashDir = 'in';
+  function openCash(dateStr){
+    cashDir = 'in';
+    document.querySelectorAll('#cashDir .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.dir === 'in'));
+    document.getElementById('cashAmount').value = '';
+    document.getElementById('cashNote').value = '';
+    document.getElementById('cashDate').value = dateStr || ymd(Date.now());
+    document.getElementById('cashOverlay').classList.remove('hidden');
+    document.getElementById('cashAmount').focus();
+  }
+  document.querySelectorAll('#cashDir .seg-btn').forEach(b => b.addEventListener('click', () => {
+    cashDir = b.dataset.dir;
+    document.querySelectorAll('#cashDir .seg-btn').forEach(x => x.classList.toggle('active', x === b));
+  }));
+  document.getElementById('cashCancel').addEventListener('click', () => document.getElementById('cashOverlay').classList.add('hidden'));
+  document.getElementById('cashSave').addEventListener('click', () => {
+    const amt = parseFloat(document.getElementById('cashAmount').value);
+    if(!amt || amt <= 0){ document.getElementById('cashAmount').focus(); return; }
+    const dateStr = document.getElementById('cashDate').value || ymd(Date.now());
+    const p = dateStr.split('-').map(Number);
+    const ts = dateStr === ymd(Date.now()) ? Date.now() : new Date(p[0], p[1] - 1, p[2], 12, 0).getTime();
+    const id = 'cash_' + Date.now();
+    db.ref('cash/' + id).set({ id, ts, amount: +(cashDir === 'out' ? -amt : amt).toFixed(2), note: document.getElementById('cashNote').value.trim() || (cashDir === 'out' ? 'Geld eruit' : 'Geld erin'), user: activeUserName() });
+    document.getElementById('cashOverlay').classList.add('hidden');
+    showToast('Kasbeweging bewaard', 'success', 2200);
   });
 
   // ===== Trade aanpassen (vanuit Historiek) =====
@@ -3227,7 +3336,7 @@
   });
 
   // ===== Versiecontrole: meldt het als er een nieuwere versie online staat (tegen oude, bewaarde pagina's) =====
-  const APP_VERSION = '2026-10-24-1250';
+  const APP_VERSION = '2026-10-24-1440';
   function checkVersion(){
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(v => {
       if(v && v.version && v.version !== APP_VERSION) document.getElementById('updateBanner').classList.remove('hidden');
@@ -3294,6 +3403,14 @@
     try{ localStorage.setItem('mewthy_repair_v1', String(Date.now())); }catch(e){}
     if(changed) console.log('Kaarten bijgewerkt:', changed);
   }
+  let cashData = [];
+  function loadCash(){
+    db.ref('cash').on('value', snap => {
+      const val = snap.val();
+      cashData = val ? Object.values(val) : [];
+      refreshHistoryIfVisible();
+    }, err => { console.error('Kas laadfout:', err); });
+  }
   function loadTransactions(){
     db.ref('transactions').on('value', snap => {
       const val = snap.val();
@@ -3305,6 +3422,7 @@
   renderFilterChips();
   loadItems();
   loadTransactions();
+  loadCash();
 
   // ===== Camera barcode scanner =====
   let camScanner = null;
