@@ -411,6 +411,8 @@
   .bk-item .field-row-3{ grid-template-columns:1fr 1fr 1fr; gap:10px; }
   .bk-item .field{ margin-bottom:10px; }
   .bk-remove{ min-height:40px; padding:0 14px; font-size:0.9rem; }
+  .bk-bulk .bk-item-head{ margin-bottom:8px; }
+  .bk-bulk-tag{ display:inline-block; font-size:.74rem; font-weight:700; padding:2px 8px; border-radius:999px; background:var(--amber-soft); color:var(--amber-deep); }
   .bk-empty{ border:1.5px dashed var(--line-strong); border-radius:var(--radius-md); padding:22px 18px; color:var(--muted); text-align:center; font-size:0.97rem; margin-top:6px; }
   #bulkModalOverlay .modal{ max-width:780px; }
   @media (min-width:960px){
@@ -422,8 +424,9 @@
     #bulkModalOverlay .modal > .field,
     #bulkModalOverlay #bkResults{ grid-column:1; }
     #bulkModalOverlay .pick-wrap{ max-height:46vh; }
-    #bulkModalOverlay #bkSelectedBox,
-    #bulkModalOverlay #bkEmptyHint{ grid-column:2; grid-row:3 / span 4; align-self:start; margin-top:0; }
+    #bulkModalOverlay #bkLeft{ grid-column:1; grid-row:3; align-self:start; }
+    #bulkModalOverlay #bkRight{ grid-column:2; grid-row:3; align-self:start; }
+    #bulkModalOverlay #bkEmptyHint{ margin-top:0; }
     #bulkModalOverlay #bkSelectedList{ max-height:50vh; overflow-y:auto; padding-right:2px; }
     #bulkModalOverlay .bk-total{ margin-top:0; }
   }
@@ -822,6 +825,7 @@
   <div class="modal wide">
     <h2>Meerdere kaarten toevoegen</h2>
     <div class="modal-sub">Vink kaarten aan en vul de Cardmarket-prijs in. Je ziet meteen wat je moet betalen. Zonder verkoopprijs wordt de CM-prijs gebruikt.</div>
+    <div id="bkLeft">
     <div class="field"><label>Naam</label><input type="text" id="bkName" placeholder="bv. Charizard"></div>
     <div class="field-row search-row">
       <div class="field"><label>Set</label><select id="bkSet" class="set-select"><option value="">Alle sets</option></select></div>
@@ -832,10 +836,15 @@
       <input type="number" id="bkDefaultPct" min="1" max="100" value="80">
     </div>
     <div id="bkResults"><div class="lookup-status">Typ een naam (minstens 2 letters) of kies een set.</div></div>
-    <div id="bkEmptyHint" class="bk-empty">Nog geen kaarten gekozen. Zoek een kaart en vink hem aan, dan verschijnt hij hier met zijn prijzen.</div>
-    <div id="bkSelectedBox" class="hidden">
-      <div class="bk-total"><span>Geselecteerd: <strong id="bkSelectedCount">0</strong></span><span>Totaal te betalen <strong>€<span id="bkTotalCost">0.00</span></strong></span></div>
-      <div id="bkSelectedList"></div>
+    </div>
+    <div id="bkRight">
+      <div id="bkEmptyHint" class="bk-empty">Nog geen kaarten gekozen. Zoek een kaart en vink hem aan, dan verschijnt hij hier met zijn prijzen.</div>
+      <div id="bkSelectedBox" class="hidden">
+        <div class="bk-total"><span>Geselecteerd: <strong id="bkSelectedCount">0</strong></span><span>Totaal te betalen <strong>€<span id="bkTotalCost">0.00</span></strong></span></div>
+        <div id="bkSelectedList"></div>
+      </div>
+      <div id="bkBulkRows"></div>
+      <button type="button" class="btn-ghost" id="bkAddBulk" style="width:100%; margin-top:6px;">+ Bulk toevoegen</button>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn-ghost" id="bkCloseBtn">Annuleren</button>
@@ -1859,9 +1868,37 @@
   function bkLinePurchase(s){
     return (parseFloat(s.cmPrice) || 0) * (parseFloat(s.pct) || 0) / 100 * (parseInt(s.qty,10) || 1);
   }
+  // Bulk in dezelfde aankoop: een lot zonder losse kaarten (bv. 200 commons voor €10)
+  let bkBulk = [];
+  function bkBulkValid(){ return bkBulk.filter(b => (parseFloat(b.paid) || 0) > 0 || (b.desc || '').trim()); }
+  function bkRenderBulk(){
+    const box = document.getElementById('bkBulkRows');
+    box.innerHTML = bkBulk.map((b, i) => `
+      <div class="bk-item bk-bulk" data-i="${i}">
+        <div class="bk-item-head"><span class="bk-bulk-tag">Bulk</span><div style="flex:1"></div><button type="button" class="btn-ghost bk-remove bkb-del">Verwijderen</button></div>
+        <div class="field"><label>Omschrijving</label><input type="text" class="bkb-desc" value="${escHtml(b.desc)}" placeholder="bv. bulk commons / reverse holo's"></div>
+        <div class="field-row">
+          <div class="field"><label>Aantal kaarten (optioneel)</label><input type="number" inputmode="numeric" min="0" step="1" class="bkb-count" value="${escHtml(b.count)}"></div>
+          <div class="field"><label>Betaald (€)</label><input type="number" inputmode="decimal" min="0" step="0.5" class="bkb-paid" value="${escHtml(b.paid)}"></div>
+        </div>
+      </div>`).join('');
+    box.querySelectorAll('.bk-bulk').forEach(el => {
+      const b = bkBulk[+el.dataset.i];
+      el.querySelector('.bkb-desc').addEventListener('input', e => { b.desc = e.target.value; bkUpdateSubmitLabel(); });
+      el.querySelector('.bkb-count').addEventListener('input', e => { b.count = e.target.value; });
+      el.querySelector('.bkb-paid').addEventListener('input', e => { b.paid = e.target.value; bkUpdateTotal(); bkUpdateSubmitLabel(); });
+      el.querySelector('.bkb-del').addEventListener('click', () => { bkBulk.splice(+el.dataset.i, 1); bkRenderBulk(); bkRenderSelected(); });
+    });
+  }
+  document.getElementById('bkAddBulk').addEventListener('click', () => {
+    bkBulk.push({ desc: '', count: '', paid: '' });
+    bkRenderBulk(); bkRenderSelected();
+    const d = document.querySelectorAll('#bkBulkRows .bkb-desc'); if(d.length) d[d.length - 1].focus();
+  });
   function bkUpdateTotal(){
     let total = 0;
     Object.values(bkSelected).forEach(s => { total += bkLinePurchase(s); });
+    bkBulk.forEach(b => { total += parseFloat(b.paid) || 0; });
     const el = document.getElementById('bkTotalCost');
     if(el) el.textContent = total.toFixed(2).replace('.', ',');
   }
@@ -1869,8 +1906,9 @@
     const ids = Object.keys(bkSelected);
     const totalQty = ids.reduce((sum,id) => sum + (parseInt(bkSelected[id].qty,10) || 1), 0);
     const btn = document.getElementById('bkSubmitBtn');
-    btn.textContent = 'Voeg ' + totalQty + ' kaart' + (totalQty === 1 ? '' : 'en') + ' toe';
-    btn.disabled = ids.length === 0;
+    const nb = bkBulkValid().length;
+    btn.textContent = ids.length === 0 && nb ? 'Bulk toevoegen' : 'Voeg ' + totalQty + ' kaart' + (totalQty === 1 ? '' : 'en') + (nb ? ' + bulk' : '') + ' toe';
+    btn.disabled = ids.length === 0 && nb === 0;
   }
   function bkUpdateRowPurchase(id){
     const s = bkSelected[id];
@@ -1890,8 +1928,8 @@
     const ids = Object.keys(bkSelected);
     document.getElementById('bkSelectedCount').textContent = ids.length;
     bkUpdateSubmitLabel();
-    document.getElementById('bkEmptyHint').classList.toggle('hidden', ids.length > 0);
-    if(ids.length === 0){ box.classList.add('hidden'); list.innerHTML = ''; return; }
+    document.getElementById('bkEmptyHint').classList.toggle('hidden', ids.length > 0 || bkBulk.length > 0);
+    if(ids.length === 0){ box.classList.toggle('hidden', bkBulk.length === 0); list.innerHTML = ''; bkUpdateTotal(); return; }
     box.classList.remove('hidden');
     list.innerHTML = ids.map(id => {
       const s = bkSelected[id];
@@ -2004,6 +2042,7 @@
   function openBulkModal(){
     bkFound = [];
     bkSelected = {};
+    bkBulk = []; bkRenderBulk();
     bkSearchGen++;
     document.getElementById('bkName').value = '';
     document.getElementById('bkNumber').value = '';
@@ -2019,8 +2058,19 @@
 
   document.getElementById('bkSubmitBtn').addEventListener('click', () => {
     const ids = Object.keys(bkSelected);
-    if(ids.length === 0) return;
+    const bulkLines = bkBulkValid();
+    if(ids.length === 0 && bulkLines.length === 0) return;
     const batchId = 'batch_' + Date.now();   // alle kaarten van deze aankoop samen terugvinden in Historiek
+    bulkLines.forEach(b => {
+      const newId = genId(), count = parseInt(b.count, 10) || null, desc = (b.desc || '').trim() || 'Bulk';
+      saveItem({
+        id: newId, barcode: newId, name: desc + (count ? ' (' + count + ' kaarten)' : ''), cardNumber: '', set: '',
+        itemType: 'Bulk', bulkCount: count, condition: null, sellingPrice: 0, purchasePrice: +(parseFloat(b.paid) || 0).toFixed(2),
+        image: null, tradeValue: null, acquisitionMethod: 'Cash',
+        acquisitionDetails: { type: 'bulkPurchase', marketPrice: null, percentage: null, bulk: true }, batchId,
+        owner: activeInitial, status: 'bulk', createdAt: Date.now()   // niet als losse kaart in de voorraad
+      });
+    });
     ids.forEach(id => {
       const s = bkSelected[id];
       const cmPrice = parseFloat(s.cmPrice) || 0;
@@ -2046,7 +2096,8 @@
       }
     });
     document.getElementById('bulkModalOverlay').classList.add('hidden');
-    try{ openPack(ids.reduce((t, id) => t + Math.max(1, parseInt(bkSelected[id].qty, 10) || 1), 0)); }catch(e){}
+    if(ids.length){ try{ openPack(ids.reduce((t, id) => t + Math.max(1, parseInt(bkSelected[id].qty, 10) || 1), 0)); }catch(e){} }
+    else showToast('Bulk toegevoegd', 'success', 2500);
   });
 
   let editingItemId = null;
@@ -2684,11 +2735,12 @@
         const title = g.bulk ? 'Collectie gekocht' + (pcts.length === 1 ? ' (' + pcts[0] + '%)' : '') : 'Los toegevoegd';
         const rows = g.items.map(i => {
           const ad = i.acquisitionDetails || {};
-          const sub = [i.set, i.cardNumber, i.itemType === 'Slab' ? ((i.gradingCompany || '') + ' ' + (i.grade || '')).trim() : i.condition].filter(Boolean).map(escHtml).join(' · ');
+          const isBulk = i.itemType === 'Bulk';
+          const sub = isBulk ? 'Bulk' : [i.set, i.cardNumber, i.itemType === 'Slab' ? ((i.gradingCompany || '') + ' ' + (i.grade || '')).trim() : i.condition].filter(Boolean).map(escHtml).join(' · ');
           return '<div class="buy-row">' + (i.image ? '<img src="' + escHtml(i.image) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<div class="buy-ph"></div>') +
             '<div class="buy-main"><div class="buy-name">' + escHtml(i.name) + '</div><div class="buy-meta">' + sub + '</div>' +
-            '<span class="status-pill ' + (i.status === 'verkocht' ? 'sold' : 'stock') + '">' + (i.status === 'verkocht' ? 'Verkocht' : 'Op voorraad') + '</span></div>' +
-            '<div class="buy-prices"><div>Betaald <strong>' + priceOrDash(i.purchasePrice) + '</strong></div>' + (ad.marketPrice != null ? '<div class="buy-meta">CM ' + eur(ad.marketPrice) + '</div>' : '') + '<div class="buy-meta">Verkoop ' + eur(i.sellingPrice) + '</div></div></div>';
+            (isBulk ? '' : '<span class="status-pill ' + (i.status === 'verkocht' ? 'sold' : 'stock') + '">' + (i.status === 'verkocht' ? 'Verkocht' : 'Op voorraad') + '</span>') + '</div>' +
+            '<div class="buy-prices"><div>Betaald <strong>' + priceOrDash(i.purchasePrice) + '</strong></div>' + (ad.marketPrice != null ? '<div class="buy-meta">CM ' + eur(ad.marketPrice) + '</div>' : '') + (isBulk ? '' : '<div class="buy-meta">Verkoop ' + eur(i.sellingPrice) + '</div>') + '</div></div>';
         }).join('');
         return '<details class="fair-card"><summary><div class="event-date-badge"><div class="event-day">' + d.getDate() + '</div><div class="event-month">' + d.toLocaleDateString('nl-BE', { month: 'short' }).toUpperCase() + '</div></div>' +
           '<div class="fair-main"><div class="event-name">' + title + '</div><div class="event-meta">' + fmtDay(ymd(g.first)) + ' · ' + d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' }) + ' · ' + escHtml(nameOf(g.owner)) + ' · ' + g.items.length + (g.items.length === 1 ? ' kaart' : ' kaarten') + (sold ? ' · ' + sold + ' verkocht' : '') + '</div></div>' +
@@ -2932,6 +2984,7 @@
           </div>
           ${r.sold ? '' : `<button type="button" class="btn-ghost bk-remove be-del">${r.del ? 'Terugzetten' : 'Verwijderen'}</button>`}
         </div>
+        ${r.type === 'Bulk' ? `<div class="field-row"><div class="field"><label>Betaald (€)</label><input type="number" inputmode="decimal" min="0" step="0.01" class="be-paid" value="${escHtml(r.paid)}"></div><div class="field"></div></div>` : `
         <div class="field-row-3">
           <div class="field"><label>CM-prijs (€)</label><input type="number" inputmode="decimal" min="0" step="0.01" class="be-cm" value="${escHtml(r.cm)}"></div>
           <div class="field"><label>Aankoop %</label><input type="number" inputmode="numeric" min="1" max="100" class="be-pct" value="${escHtml(r.pct)}"></div>
@@ -2941,16 +2994,17 @@
           ${r.type === 'Raw' || !r.type ? `<div class="field"><label>Conditie</label><select class="be-cond">${BUY_CONDS.map(c => `<option value="${c}" ${c === r.cond ? 'selected' : ''}>${c}</option>`).join('')}</select></div>` : '<div class="field"></div>'}
           <div class="field"><label>${r.sold ? 'Verkocht voor (€)' : 'Verkoopprijs (€)'}</label><input type="number" inputmode="decimal" min="0" step="0.01" class="be-sell" value="${escHtml(r.sell)}"></div>
           <div class="field"></div>
-        </div>
+        </div>`}
       </div>`).join('');
     list.querySelectorAll('.bk-item').forEach(el => {
       const r = buyEdit.rows[+el.dataset.i];
       const paidInp = el.querySelector('.be-paid');
       const recalc = () => { if(r.cm !== '' && r.pct !== ''){ r.paid = String(buyRound(r.cm, r.pct)); paidInp.value = r.paid; } buyEditTotal(); };
-      el.querySelector('.be-cm').addEventListener('input', e => { r.cm = e.target.value; recalc(); });
-      el.querySelector('.be-pct').addEventListener('input', e => { r.pct = e.target.value; recalc(); });
+      const cmI = el.querySelector('.be-cm'), pctI = el.querySelector('.be-pct'), sellI = el.querySelector('.be-sell');
+      if(cmI) cmI.addEventListener('input', e => { r.cm = e.target.value; recalc(); });
+      if(pctI) pctI.addEventListener('input', e => { r.pct = e.target.value; recalc(); });
       paidInp.addEventListener('input', e => { r.paid = e.target.value; buyEditTotal(); });
-      el.querySelector('.be-sell').addEventListener('input', e => { r.sell = e.target.value; });
+      if(sellI) sellI.addEventListener('input', e => { r.sell = e.target.value; });
       const cond = el.querySelector('.be-cond'); if(cond) cond.addEventListener('change', e => { r.cond = e.target.value; });
       const del = el.querySelector('.be-del'); if(del) del.addEventListener('click', () => { r.del = !r.del; renderBuyEdit(); });
     });
@@ -2959,7 +3013,7 @@
   document.getElementById('buyEditPctBtn').addEventListener('click', () => {
     const pct = document.getElementById('buyEditPct').value;
     if(!pct) return;
-    buyEdit.rows.forEach(r => { r.pct = pct; if(r.cm !== '') r.paid = String(buyRound(r.cm, pct)); });
+    buyEdit.rows.forEach(r => { if(r.type === 'Bulk') return; r.pct = pct; if(r.cm !== '') r.paid = String(buyRound(r.cm, pct)); });
     renderBuyEdit();
   });
   document.getElementById('buyEditCancel').addEventListener('click', () => { document.getElementById('buyEditOverlay').classList.add('hidden'); buyEdit = null; });
@@ -2978,6 +3032,7 @@
       if(paid !== (it.purchasePrice != null ? +it.purchasePrice : null)) upd.purchasePrice = paid;
       if(sell != null && sell !== +it.sellingPrice) upd.sellingPrice = sell;
       if((r.type === 'Raw' || !r.type) && r.cond !== (it.condition || 'NM')) upd.condition = r.cond;
+      if(r.type === 'Bulk'){ delete upd.sellingPrice; }
       const ad = it.acquisitionDetails || null;
       const oldCm = ad && ad.marketPrice != null ? +ad.marketPrice : null, oldPct = ad && ad.percentage != null ? +ad.percentage : null;
       if(cm !== oldCm || pct !== oldPct){
@@ -3016,7 +3071,7 @@
     if(!tcgSets.length){ itemRepairStarted = false; return; }
     let changed = 0;
     for(const it of itemsData.slice()){
-      if(!it || !it.id || it.itemType === 'Sealed' || it.itemType === 'Other' || !it.name) continue;
+      if(!it || !it.id || it.itemType === 'Sealed' || it.itemType === 'Other' || it.itemType === 'Bulk' || !it.name) continue;
       const hasTcgImg = /assets\.tcgdex\.net/.test(it.image || '');
       const needs = !it.tcgSet || !hasTcgImg || /Classic Collection/i.test(it.set || '');
       if(!needs) continue;
