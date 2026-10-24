@@ -315,6 +315,16 @@
   .status-pill{ display:inline-block; font-size:.74rem; font-weight:700; padding:2px 8px; border-radius:999px; margin-top:3px; }
   .status-pill.stock{ background:var(--violet-soft); color:var(--violet-deep); }
   .status-pill.sold{ background:var(--mint-soft); color:var(--mint); }
+  .history-side{ display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0; }
+  .tx-edit{ background:var(--surface-raised); border:none; color:var(--violet-deep); font-weight:700; font-size:.85rem; border-radius:999px; padding:7px 12px; cursor:pointer; flex-shrink:0; }
+  .tx-edit:hover{ background:var(--violet-soft); }
+  .tx-line{ display:flex; gap:8px; align-items:flex-end; margin-bottom:10px; }
+  .tx-line .field{ margin-bottom:0; }
+  .tx-line .tl-name{ flex:1; min-width:0; }
+  .tx-line .tl-price{ flex:0 0 110px; }
+  .tx-line .tl-fixed{ flex:1; min-width:0; font-weight:700; padding-bottom:12px; }
+  .tx-line .tl-del{ flex:0 0 auto; min-height:48px; padding:0 14px; }
+  .tx-edit-note{ color:var(--muted); font-size:.85rem; margin:4px 0 8px; }
   .buy-actions{ display:flex; justify-content:flex-end; padding:0 18px 10px; }
   .buy-edit-all{ display:flex; gap:10px; align-items:flex-end; background:var(--surface-raised); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:14px; }
   .buy-edit-all .field{ flex:1; margin-bottom:0; }
@@ -330,7 +340,9 @@
     .fair-stats{ grid-template-columns:1fr 1fr; padding:0 14px 12px; }
     .fair-list{ margin:0 10px 12px; }
     .buy-row{ padding:10px 12px; }
-    #buyEditOverlay .modal-actions{ flex-wrap:wrap; }
+    #buyEditOverlay .modal-actions, #txEditOverlay .modal-actions{ flex-wrap:wrap; }
+    #histContent .type-badge{ min-width:0; padding:4px 9px; font-size:.76rem; }
+    .tx-edit{ padding:6px 10px; font-size:.8rem; }
     .buy-edit-total{ flex:1 0 100%; margin:0 0 2px; }
   }
   .ti-results{ margin-bottom:10px; }
@@ -818,6 +830,29 @@
     <div class="modal-actions">
       <button type="button" class="btn-ghost" id="bkCloseBtn">Annuleren</button>
       <button type="button" class="btn-primary" id="bkSubmitBtn" disabled>Voeg 0 kaarten toe</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== VERKOOP AANPASSEN ===== -->
+<div class="modal-overlay hidden" id="txEditOverlay">
+  <div class="modal">
+    <h2 id="txEditTitle">Verkoop aanpassen</h2>
+    <div class="modal-sub" id="txEditSub">—</div>
+    <div id="txEditLines"></div>
+    <button type="button" class="btn-ghost" id="txEditAddLine" style="width:100%; margin-bottom:14px;">+ Regel toevoegen</button>
+    <div class="field"><label>Betaald met</label>
+      <div class="seg" id="txEditPay">
+        <button type="button" class="seg-btn" data-method="Cash">Cash</button>
+        <button type="button" class="seg-btn" data-method="Payconiq">Payconiq</button>
+      </div>
+    </div>
+    <div class="tx-edit-note" id="txEditNote"></div>
+    <button type="button" class="btn-ghost btn-danger" id="txEditDelete" style="width:100%; margin-top:6px;">Verkoop verwijderen</button>
+    <div class="modal-actions">
+      <div class="buy-edit-total">Totaal <strong id="txEditTotal">€0,00</strong></div>
+      <button type="button" class="btn-ghost" id="txEditCancel">Annuleren</button>
+      <button type="button" class="btn-primary" id="txEditSave">Opslaan</button>
     </div>
   </div>
 </div>
@@ -2477,7 +2512,8 @@
     const inc = (tx.incomingItems && tx.incomingItems.length) ? '<div class="history-meta">Terug: ' + tx.incomingItems.map(i => escHtml(i.name) + ' (' + eur(i.tradeValue) + ')').join(', ') + (tx.cashComponent ? ' · cash ' + eurS(tx.cashComponent) : '') + '</div>' : '';
     const time = new Date(tx.timestamp).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
     const meta = [escHtml(tx.user || ''), time, escHtml(tx.paymentMethod || ''), tx.profit != null ? 'winst ' + eurS(tx.profit) : ''].filter(Boolean).join(' · ');
-    return '<div class="history-row"><span class="type-badge ' + escHtml(tx.type) + '">' + label + '</span><div class="history-main"><div class="history-items">' + items + '</div><div class="history-meta">' + meta + '</div>' + inc + '</div><div class="history-amount">' + eur(tx.totalSaleValue || 0) + '</div></div>';
+    const edit = (tx.type === 'sale' && tx.id) ? '<button type="button" class="tx-edit" data-tx="' + escHtml(tx.id) + '" aria-label="Verkoop aanpassen">Aanpassen</button>' : '';
+    return '<div class="history-row"><span class="type-badge ' + escHtml(tx.type) + '">' + label + '</span><div class="history-main"><div class="history-items">' + items + '</div><div class="history-meta">' + meta + '</div>' + inc + '</div><div class="history-side"><div class="history-amount">' + eur(tx.totalSaleValue || 0) + '</div>' + edit + '</div></div>';
   }
   function statCards(list){ return '<div class="hist-stats">' + list.map(x => '<div class="stat-card"><div class="stat-label">' + x[0] + '</div><div class="stat-value' + (x[2] ? ' ' + x[2] : '') + '">' + x[1] + '</div></div>').join('') + '</div>'; }
 
@@ -2596,6 +2632,7 @@
     if(histTab === 'verkopen') renderHistVerkopen(box);
     else if(histTab === 'aankopen') renderHistAankopen(box);
     else renderHistBeurs(box);
+    box.querySelectorAll('.tx-edit').forEach(b => b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openTxEdit(b.dataset.tx); }));
   }
   function refreshHistoryIfVisible(){
     const v = document.getElementById('view-historiek');
@@ -2612,6 +2649,82 @@
   }
   document.querySelectorAll('#histTabs .seg-btn').forEach(b => b.addEventListener('click', () => { histTab = b.dataset.tab; renderHistory(); }));
   document.getElementById('dashAllHistBtn').addEventListener('click', () => openHistory('verkopen'));
+
+  // ===== Verkoop aanpassen (vanuit Historiek) =====
+  let txEdit = null;
+  function openTxEdit(id){
+    const tx = transactionsData.find(t => t && t.id === id);
+    if(!tx) return;
+    const bulk = !!tx.bulk || !(tx.items || []).some(i => i.id);
+    txEdit = { tx, bulk, pay: tx.paymentMethod || 'Cash',
+      lines: (tx.items || []).map(i => ({ id: i.id || null, name: i.name || '', price: i.price != null ? String(i.price) : '', cost: i.cost })) };
+    document.getElementById('txEditTitle').textContent = bulk ? 'Bulkverkoop aanpassen' : 'Verkoop aanpassen';
+    const d = new Date(tx.timestamp);
+    document.getElementById('txEditSub').textContent = d.toLocaleDateString('nl-BE', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' +
+      d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' }) + ' · ' + (tx.user || '');
+    document.getElementById('txEditAddLine').classList.toggle('hidden', !bulk);
+    document.getElementById('txEditNote').textContent = bulk ? '' : 'Verwijder je deze verkoop, dan komen de kaarten terug in de voorraad.';
+    renderTxEdit();
+    document.getElementById('txEditOverlay').classList.remove('hidden');
+  }
+  function txEditTotal(){
+    document.getElementById('txEditTotal').textContent = eur(txEdit.lines.reduce((s, l) => s + (parseFloat(l.price) || 0), 0));
+  }
+  function renderTxEdit(){
+    const box = document.getElementById('txEditLines');
+    box.innerHTML = txEdit.lines.map((l, i) => '<div class="tx-line" data-i="' + i + '">' +
+      (txEdit.bulk
+        ? '<div class="field tl-name"><label>Omschrijving</label><input type="text" class="tl-n" value="' + escHtml(l.name) + '" placeholder="bv. 10 bulk cards"></div>'
+        : '<div class="tl-fixed">' + escHtml(l.name) + '</div>') +
+      '<div class="field tl-price"><label>Prijs (€)</label><input type="number" inputmode="decimal" min="0" step="0.01" class="tl-p" value="' + escHtml(l.price) + '"></div>' +
+      (txEdit.bulk ? '<button type="button" class="btn-ghost tl-del" aria-label="Regel verwijderen">×</button>' : '') +
+    '</div>').join('');
+    box.querySelectorAll('.tx-line').forEach(el => {
+      const l = txEdit.lines[+el.dataset.i];
+      const n = el.querySelector('.tl-n'); if(n) n.addEventListener('input', e => { l.name = e.target.value; });
+      el.querySelector('.tl-p').addEventListener('input', e => { l.price = e.target.value; txEditTotal(); });
+      const del = el.querySelector('.tl-del'); if(del) del.addEventListener('click', () => { txEdit.lines.splice(+el.dataset.i, 1); renderTxEdit(); });
+    });
+    document.querySelectorAll('#txEditPay .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.method === txEdit.pay));
+    txEditTotal();
+  }
+  function closeTxEdit(){ document.getElementById('txEditOverlay').classList.add('hidden'); txEdit = null; }
+  document.querySelectorAll('#txEditPay .seg-btn').forEach(b => b.addEventListener('click', () => { txEdit.pay = b.dataset.method; renderTxEdit(); }));
+  document.getElementById('txEditAddLine').addEventListener('click', () => {
+    txEdit.lines.push({ id: null, name: '', price: '' }); renderTxEdit();
+    const inputs = document.querySelectorAll('#txEditLines .tl-n'); if(inputs.length) inputs[inputs.length - 1].focus();
+  });
+  document.getElementById('txEditCancel').addEventListener('click', closeTxEdit);
+  function txDelete(){
+    const tx = txEdit.tx;
+    if(!txEdit.bulk) (tx.items || []).forEach(i => { if(i.id && itemsData.some(x => x.id === i.id)) db.ref('items/' + i.id).update({ status: 'voorraad', soldMethod: null }); });
+    db.ref('transactions/' + tx.id).remove();
+    closeTxEdit();
+    showToast('Verkoop verwijderd', 'success', 2500);
+  }
+  document.getElementById('txEditDelete').addEventListener('click', () => {
+    if(!txEdit) return;
+    if(!confirm(txEdit.bulk ? 'Deze bulkverkoop verwijderen?' : 'Deze verkoop verwijderen? De kaarten komen terug in de voorraad.')) return;
+    txDelete();
+  });
+  document.getElementById('txEditSave').addEventListener('click', () => {
+    if(!txEdit) return;
+    const tx = txEdit.tx;
+    const lines = txEdit.lines.map(l => ({ id: l.id, name: (l.name || '').trim() || (txEdit.bulk ? 'Bulk item' : ''), price: parseFloat(l.price) || 0, cost: l.cost }))
+      .filter(l => !txEdit.bulk || l.price > 0);
+    if(!lines.length){
+      if(confirm('Er staat geen enkele regel meer in. Deze verkoop verwijderen?')) txDelete();
+      return;
+    }
+    const total = +lines.reduce((s, l) => s + l.price, 0).toFixed(2);
+    const items = lines.map(l => { const o = { name: l.name, price: l.price }; if(l.id) o.id = l.id; if(l.cost !== undefined) o.cost = l.cost; return o; });
+    const upd = { items, totalSaleValue: total, paymentMethod: txEdit.pay };
+    if(!txEdit.bulk && tx.totalAcquisitionValue != null) upd.profit = +(total - tx.totalAcquisitionValue).toFixed(2);
+    db.ref('transactions/' + tx.id).update(upd);
+    if(!txEdit.bulk) lines.forEach(l => { if(l.id && itemsData.some(x => x.id === l.id)) db.ref('items/' + l.id).update({ sellingPrice: l.price, soldMethod: txEdit.pay }); });
+    closeTxEdit();
+    showToast('Verkoop bijgewerkt', 'success', 2500);
+  });
 
   // ===== Aankoop aanpassen (vanuit Historiek) =====
   let buyEdit = null;
